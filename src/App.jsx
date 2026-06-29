@@ -1,5 +1,6 @@
 import React, { lazy, Suspense } from 'react'
 import { Route, Routes } from 'react-router-dom'
+import ProtectedRoute from './components/ProtectedRoute'
 
 const loadPage = (loader, name) =>
   lazy(() => loader().then((module) => ({ default: module[name] })))
@@ -47,21 +48,23 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/onboarding" element={<OnboardingPage />} />
-        <Route element={<DashboardLayout />}>
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/analyze" element={<AnalyzeHandlePage />} />
-          <Route path="/weakness" element={<WeaknessReportPage />} />
-          <Route path="/rating-analysis" element={<RatingAnalysisPage />} />
-          <Route path="/verdict-analysis" element={<VerdictAnalysisPage />} />
-          <Route path="/upsolving" element={<UpsolvingPage />} />
-          <Route path="/ai-coach" element={<AICoachPage />} />
-          <Route path="/practice-plan" element={<PracticePlanPage />} />
-          <Route path="/recommendations" element={<RecommendationsPage />} />
-          <Route path="/progress" element={<ProgressPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/report/:id" element={<ReportDetailsPage />} />
+        <Route element={<ProtectedRoute />}>
+          <Route path="/onboarding" element={<OnboardingPage />} />
+          <Route element={<DashboardLayout />}>
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/analyze" element={<AnalyzeHandlePage />} />
+            <Route path="/weakness" element={<WeaknessReportPage />} />
+            <Route path="/rating-analysis" element={<RatingAnalysisPage />} />
+            <Route path="/verdict-analysis" element={<VerdictAnalysisPage />} />
+            <Route path="/upsolving" element={<UpsolvingPage />} />
+            <Route path="/ai-coach" element={<AICoachPage />} />
+            <Route path="/practice-plan" element={<PracticePlanPage />} />
+            <Route path="/recommendations" element={<RecommendationsPage />} />
+            <Route path="/progress" element={<ProgressPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/report/:id" element={<ReportDetailsPage />} />
+          </Route>
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

@@ -106,6 +106,7 @@ export function BarChartView({ data, dataKey = 'rate', nameKey = 'bucket', color
             borderRadius: 12,
             fontSize: 12,
           }}
+          cursor={{ fill: 'rgba(0.1, 0.1, 0.1, 0.5)' }}
         />
         <Bar dataKey={dataKey} fill={color} radius={[6, 6, 2, 2]} />
       </BarChart>

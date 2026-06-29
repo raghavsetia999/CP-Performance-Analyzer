@@ -10,6 +10,7 @@ import {
   ClipboardList,
   Gauge,
   LayoutDashboard,
+  LogOut,
   Menu,
   Moon,
   RefreshCw,
@@ -22,6 +23,7 @@ import {
   X,
 } from 'lucide-react'
 import { Avatar, Button, Input } from '../components/ui'
+import { useAuth } from '../context/AuthContext'
 import { cn } from '../lib/utils'
 
 const groups = [
@@ -142,14 +144,21 @@ function Sidebar({ open, setOpen, collapsed, setCollapsed }) {
     </>
   )
 }
-function Topbar({ setOpen, collapsed }) {
+function Topbar({ setOpen, collapsed, user, onLogout }) {
   const location = useLocation()
   const title =
     groups.flatMap((g) => g.links).find((l) => l[1] === location.pathname)?.[0] || 'Dashboard'
+  const initials =
+    user?.name
+      ?.split(/\s+/)
+      .map((part) => part[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || 'CP'
   return (
     <header
       className={cn(
-        'fixed right-0 top-0 z-30 flex h-[72px] items-center justify-between border-b border-white/[.06] bg-ink/80 px-4 backdrop-blur-xl transition-all sm:px-6',
+        'fixed left-0 right-0 top-0 z-30 flex h-[72px] items-center justify-between border-b border-white/[.06] bg-ink/80 px-4 backdrop-blur-xl transition-all sm:px-6',
         collapsed ? 'lg:left-[82px]' : 'lg:left-[260px]',
       )}
     >
@@ -180,18 +189,22 @@ function Topbar({ setOpen, collapsed }) {
         <Button variant="ghost" size="icon" title="Theme">
           <Moon size={17} />
         </Button>
-        <Avatar className="ml-1 h-9 w-9 text-xs" />
+        <Avatar initials={initials} className="ml-1 h-9 w-9 text-xs" />
+        <Button variant="ghost" size="icon" title="Log out" onClick={onLogout}>
+          <LogOut size={17} />
+        </Button>
       </div>
     </header>
   )
 }
 export default function DashboardLayout() {
+  const { user, logout } = useAuth()
   const [open, setOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   return (
     <div className="min-h-screen bg-ink">
       <Sidebar {...{ open, setOpen, collapsed, setCollapsed }} />
-      <Topbar {...{ setOpen, collapsed }} />
+      <Topbar setOpen={setOpen} collapsed={collapsed} user={user} onLogout={logout} />
       <main
         className={cn(
           'min-h-screen pt-[72px] transition-all',

@@ -1,5 +1,5 @@
-import React from 'react'
-import { Link } from 'react-router-dom'
+import React, { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   Activity,
   ArrowRight,
@@ -24,7 +24,11 @@ import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer } from 'rechart
 import Navbar from '../components/Navbar'
 import { Badge, Button, Card, Input, Label, Progress, Select } from '../components/ui'
 import { BarChartView, InsightBanner } from '../components/AppComponents'
+import { useAuth } from '../context/AuthContext'
 import { ratingData, topicData } from '../data/mockData'
+import { analyticsApi } from '../services/analyticsApi'
+import { getApiErrorMessage } from '../services/apiClient'
+import { userApi } from '../services/userApi'
 
 const features = [
   [Target, 'Weak Topic Detection', 'Pinpoint the exact concepts costing you accepted submissions.'],
@@ -224,7 +228,7 @@ export function LandingPage() {
             <Card className="p-5">
               <p className="mb-4 text-sm font-semibold">Topic weakness score</p>
               <div className="h-72">
-                <BarChartView data={topicData} dataKey="weakness" nameKey="short" color="#8b5cf6" />
+                <BarChartView data={topicData} dataKey="weakness" nameKey="short" color="#30a2e3" />
               </div>
             </Card>
           </div>
@@ -376,7 +380,38 @@ const Field = ({ label, icon: Icon, ...props }) => (
     </div>
   </div>
 )
+function FormError({ message }) {
+  if (!message) return null
+  return (
+    <div
+      role="alert"
+      className="rounded-xl border border-rose-400/20 bg-rose-400/[.06] p-3 text-sm text-rose-200"
+    >
+      {message}
+    </div>
+  )
+}
 export function LoginPage() {
+  const navigate = useNavigate()
+  const { login } = useAuth()
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    setError('')
+    setSubmitting(true)
+    try {
+      await login({ email: form.get('email'), password: form.get('password') })
+      navigate('/dashboard', { replace: true })
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <AuthShell
       title="Welcome back"
@@ -390,8 +425,17 @@ export function LoginPage() {
         </p>
       }
     >
-      <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
-        <Field label="Email" icon={Mail} type="email" placeholder="you@example.com" />
+      <form className="space-y-5" onSubmit={handleSubmit}>
+        <FormError message={error} />
+        <Field
+          label="Email"
+          icon={Mail}
+          name="email"
+          type="email"
+          autoComplete="email"
+          placeholder="you@example.com"
+          required
+        />
         <div>
           <div className="flex justify-between">
             <Label>Password</Label>
@@ -399,15 +443,20 @@ export function LoginPage() {
               Forgot password?
             </Link>
           </div>
-          <Field icon={LockKeyhole} type="password" placeholder="••••••••" />
+          <Field
+            icon={LockKeyhole}
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            placeholder="••••••••"
+            required
+          />
         </div>
-        <Link to="/dashboard" className="block">
-          <Button className="w-full">
-            Log in <ArrowRight size={16} />
-          </Button>
-        </Link>
+        <Button className="w-full" type="submit" disabled={submitting}>
+          {submitting ? 'Logging in…' : 'Log in'} <ArrowRight size={16} />
+        </Button>
         <Divider />
-        <Button variant="secondary" className="w-full">
+        <Button type="button" variant="secondary" className="w-full" disabled title="Coming later">
           <span className="font-bold text-white">G</span> Continue with Google
         </Button>
       </form>
@@ -424,6 +473,37 @@ function Divider() {
   )
 }
 export function RegisterPage() {
+  const navigate = useNavigate()
+  const { register } = useAuth()
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    if (form.get('password') !== form.get('confirmPassword')) {
+      setError('Passwords do not match.')
+      return
+    }
+
+    setError('')
+    setSubmitting(true)
+    try {
+      await register({
+        name: form.get('name'),
+        email: form.get('email'),
+        password: form.get('password'),
+        codeforcesHandle: form.get('codeforcesHandle'),
+        targetRating: Number(form.get('targetRating')),
+      })
+      navigate('/onboarding', { replace: true })
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <AuthShell
       title="Create your workspace"
@@ -437,36 +517,61 @@ export function RegisterPage() {
         </p>
       }
     >
-      <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-        <Field label="Full name" icon={User} placeholder="Raghav Setia" />
-        <Field label="Email" icon={Mail} type="email" placeholder="you@example.com" />
+      <form className="space-y-4" onSubmit={handleSubmit}>
+        <FormError message={error} />
+        <Field label="Full name" icon={User} name="name" placeholder="Raghav Setia" required />
+        <Field
+          label="Email"
+          icon={Mail}
+          name="email"
+          type="email"
+          autoComplete="email"
+          placeholder="you@example.com"
+          required
+        />
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Password" icon={LockKeyhole} type="password" placeholder="••••••••" />
+          <Field
+            label="Password"
+            icon={LockKeyhole}
+            name="password"
+            type="password"
+            autoComplete="new-password"
+            minLength={8}
+            placeholder="••••••••"
+            required
+          />
           <Field
             label="Confirm password"
             icon={LockKeyhole}
+            name="confirmPassword"
             type="password"
+            autoComplete="new-password"
+            minLength={8}
             placeholder="••••••••"
+            required
           />
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Codeforces handle" icon={Braces} placeholder="raghav_setia" />
+          <Field
+            label="Codeforces handle"
+            icon={Braces}
+            name="codeforcesHandle"
+            placeholder="raghav_setia"
+          />
           <div>
             <Label>Target rating</Label>
-            <Select className="w-full">
-              <option>1400 — Specialist</option>
-              <option selected>1600 — Expert</option>
-              <option>1900 — Candidate Master</option>
+            <Select name="targetRating" className="w-full" defaultValue="1600">
+              <option value="1400">1400 — Specialist</option>
+              <option value="1600">1600 — Expert</option>
+              <option value="1900">1900 — Candidate Master</option>
             </Select>
           </div>
         </div>
-        <Link to="/onboarding" className="block">
-          <Button className="mt-2 w-full">
-            Create free account <ArrowRight size={16} />
-          </Button>
-        </Link>
+        <Button className="mt-2 w-full" type="submit" disabled={submitting}>
+          {submitting ? 'Creating account…' : 'Create free account'} <ArrowRight size={16} />
+        </Button>
         <Divider />
-        <Button variant="secondary" className="w-full">
+        <Button type="button" variant="secondary" className="w-full" disabled title="Coming later">
           <b>G</b> Continue with Google
         </Button>
       </form>
@@ -488,13 +593,18 @@ export function ForgotPasswordPage() {
     >
       <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
         <Field label="Email address" icon={Mail} type="email" placeholder="you@example.com" />
-        <Button className="w-full">
-          Send reset link <ArrowRight size={16} />
+        <Button
+          className="w-full"
+          disabled
+          title="Password reset is planned after the MVP auth flow"
+        >
+          Password reset coming next <ArrowRight size={16} />
         </Button>
         <div className="flex gap-3 rounded-xl border border-white/[.06] bg-white/[.025] p-4">
           <ShieldCheck size={18} className="shrink-0 text-emerald-400" />
           <p className="text-xs leading-5 text-slate-500">
-            For security, reset links expire after 30 minutes and can only be used once.
+            Password reset email delivery is intentionally disabled until its secure token flow is
+            implemented.
           </p>
         </div>
       </form>
@@ -502,6 +612,53 @@ export function ForgotPasswordPage() {
   )
 }
 export function OnboardingPage() {
+  const navigate = useNavigate()
+  const { user, updateUser } = useAuth()
+  const [topics, setTopics] = useState(
+    user?.difficultTopics?.length
+      ? user.difficultTopics
+      : ['Dynamic Programming', 'Graphs', 'Binary Search'],
+  )
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const availableTopics = [
+    'Dynamic Programming',
+    'Graphs',
+    'Binary Search',
+    'Greedy',
+    'Number Theory',
+    'Combinatorics',
+  ]
+
+  function toggleTopic(topic) {
+    setTopics((current) =>
+      current.includes(topic) ? current.filter((item) => item !== topic) : [...current, topic],
+    )
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    const handle = String(form.get('codeforcesHandle')).trim()
+    setError('')
+    setSubmitting(true)
+    try {
+      await analyticsApi.analyze(handle)
+      await userApi.updateProfile({
+        targetRating: Number(form.get('targetRating')),
+        preferredPracticeMinutes: Number(form.get('preferredPracticeMinutes')),
+        difficultTopics: topics,
+      })
+      const nextUser = await userApi.updateHandle(handle)
+      updateUser(nextUser)
+      navigate('/dashboard', { replace: true })
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <div className="mesh min-h-screen px-5 py-10">
       <div className="mx-auto max-w-3xl">
@@ -521,46 +678,71 @@ export function OnboardingPage() {
           </p>
         </div>
         <Card className="mt-8 p-5 sm:p-8">
-          <form onSubmit={(e) => e.preventDefault()} className="grid gap-6 sm:grid-cols-2">
-            <Field label="Codeforces handle" icon={Braces} placeholder="raghav_setia" />
-            <Field label="Current rating" placeholder="1231" type="number" />
-            <Field label="Target rating" placeholder="1600" type="number" />
+          <form onSubmit={handleSubmit} className="grid gap-6 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <FormError message={error} />
+            </div>
+            <Field
+              label="Codeforces handle"
+              icon={Braces}
+              name="codeforcesHandle"
+              defaultValue={user?.codeforcesHandle || ''}
+              placeholder="raghav_setia"
+              required
+            />
+            <Field
+              label="Target rating"
+              name="targetRating"
+              defaultValue={user?.targetRating || 1600}
+              min="800"
+              max="4000"
+              type="number"
+              required
+            />
             <div>
               <Label>Practice time per day</Label>
-              <Select className="w-full">
-                <option>30 minutes</option>
-                <option selected>60 minutes</option>
-                <option>90 minutes</option>
-                <option>2+ hours</option>
+              <Select
+                name="preferredPracticeMinutes"
+                className="w-full"
+                defaultValue={String(user?.preferredPracticeMinutes || 60)}
+              >
+                <option value="30">30 minutes</option>
+                <option value="60">60 minutes</option>
+                <option value="90">90 minutes</option>
+                <option value="120">2 hours</option>
               </Select>
+            </div>
+            <div>
+              <Label>Rating is verified automatically</Label>
+              <div className="flex h-11 items-center rounded-xl border border-white/[.08] bg-black/20 px-3.5 text-sm text-slate-500">
+                Pulled from your public Codeforces profile
+              </div>
             </div>
             <div className="sm:col-span-2">
               <Label>Topics you already find difficult</Label>
               <div className="flex flex-wrap gap-2">
-                {[
-                  'Dynamic Programming',
-                  'Graphs',
-                  'Binary Search',
-                  'Greedy',
-                  'Number Theory',
-                  'Combinatorics',
-                ].map((x, i) => (
-                  <button
-                    key={x}
-                    className={`rounded-xl border px-3 py-2 text-sm ${i < 3 ? 'border-cyan-400/30 bg-cyan-400/10 text-cyan-300' : 'border-white/[.08] text-slate-500'}`}
-                  >
-                    {i < 3 && <Check size={13} className="mr-1 inline" />}
-                    {x}
-                  </button>
-                ))}
+                {availableTopics.map((topic) => {
+                  const selected = topics.includes(topic)
+                  return (
+                    <button
+                      key={topic}
+                      type="button"
+                      onClick={() => toggleTopic(topic)}
+                      aria-pressed={selected}
+                      className={`rounded-xl border px-3 py-2 text-sm ${selected ? 'border-cyan-400/30 bg-cyan-400/10 text-cyan-300' : 'border-white/[.08] text-slate-500'}`}
+                    >
+                      {selected && <Check size={13} className="mr-1 inline" />}
+                      {topic}
+                    </button>
+                  )
+                })}
               </div>
             </div>
             <div className="sm:col-span-2">
-              <Link to="/dashboard">
-                <Button size="lg" className="w-full">
-                  Generate my first analysis <Sparkles size={17} />
-                </Button>
-              </Link>
+              <Button size="lg" className="w-full" type="submit" disabled={submitting}>
+                {submitting ? 'Analyzing Codeforces history…' : 'Generate my first analysis'}
+                <Sparkles size={17} />
+              </Button>
             </div>
           </form>
         </Card>

@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
 import {
   Activity,
   ArrowRight,
@@ -65,6 +66,39 @@ import {
   user,
   verdictData,
 } from '../data/mockData'
+import { useAnalytics } from '../context/AnalyticsContext'
+import { useAuth } from '../context/AuthContext'
+import { getApiErrorMessage } from '../services/apiClient'
+import { progressApi } from '../services/progressApi'
+import { reportApi } from '../services/reportApi'
+
+function DataState({ loading, error, onRetry }) {
+  if (loading) {
+    return <Card className="p-8 text-center text-sm text-slate-500">Loading live analytics…</Card>
+  }
+  return (
+    <Card className="border-rose-400/20 bg-rose-400/[.04] p-6">
+      <p className="text-sm text-rose-200">{error || 'No data is available yet.'}</p>
+      {onRetry && (
+        <Button className="mt-4" size="sm" onClick={() => onRetry()}>
+          Retry
+        </Button>
+      )}
+    </Card>
+  )
+}
+
+function displayVerdict(verdict) {
+  return (
+    {
+      WRONG_ANSWER: 'Wrong answer',
+      TIME_LIMIT_EXCEEDED: 'Time limit',
+      RUNTIME_ERROR: 'Runtime error',
+      COMPILATION_ERROR: 'Compilation error',
+      MEMORY_LIMIT_EXCEEDED: 'Memory limit',
+    }[verdict] || String(verdict || 'Unknown').replaceAll('_', ' ')
+  )
+}
 
 const Filters = () => (
   <div className="flex flex-wrap gap-2">
@@ -91,6 +125,13 @@ const Filters = () => (
   </div>
 )
 export function UpsolvingPage() {
+  const { report, loading, error, refresh } = useAnalytics()
+  if (!report) return <DataState loading={loading} error={error} onRetry={refresh} />
+  const queue = report.upsolvingAnalysis.map((problem) => ({
+    ...problem,
+    verdict: displayVerdict(problem.lastVerdict),
+  }))
+  const highPriority = queue.filter((problem) => problem.priorityLevel === 'High').length
   return (
     <div className="space-y-6">
       <SectionHeader
@@ -98,15 +139,30 @@ export function UpsolvingPage() {
         title="Upsolving queue"
         description="Unsolved contest attempts ranked by learning value and urgency."
         action={
-          <Button>
+          <Button onClick={() => refresh()}>
             <RefreshCw size={15} /> Refresh queue
           </Button>
         }
       />
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Waiting to upsolve" value="14" icon={Target} caption="6 high priority" />
-        <StatCard label="Upsolved this month" value="11" icon={CheckCircle2} change="+37%" />
-        <StatCard label="Average recovery time" value="3.2 days" icon={Clock3} change="-0.8 day" />
+        <StatCard
+          label="Waiting to upsolve"
+          value={queue.length}
+          icon={Target}
+          caption={`${highPriority} high priority`}
+        />
+        <StatCard
+          label="Repeated failures"
+          value={queue.filter((problem) => problem.attempts >= 3).length}
+          icon={RefreshCw}
+          caption="Three or more attempts"
+        />
+        <StatCard
+          label="Top priority score"
+          value={queue[0]?.priorityScore || 0}
+          icon={Clock3}
+          caption="Out of 100"
+        />
       </div>
       <Card>
         <div className="flex flex-col justify-between gap-4 p-5 lg:flex-row lg:items-center">
@@ -118,7 +174,7 @@ export function UpsolvingPage() {
           </div>
           <Filters />
         </div>
-        <ProblemTable problems={problems} />
+        <ProblemTable problems={queue} />
       </Card>
       <Card className="p-6">
         <SectionHeader
@@ -126,7 +182,7 @@ export function UpsolvingPage() {
           description="An efficient sequence based on dependencies and expected learning gain"
         />
         <div className="grid gap-3 lg:grid-cols-3">
-          {problems.slice(0, 3).map((p, i) => (
+          {queue.slice(0, 3).map((p, i) => (
             <div
               key={p.contest}
               className="flex gap-4 rounded-xl border border-white/[.06] bg-black/15 p-4"
@@ -320,6 +376,9 @@ export function PracticePlanPage() {
 }
 
 export function RecommendationsPage() {
+  const { report, loading, error, refresh } = useAnalytics()
+  if (!report) return <DataState loading={loading} error={error} onRetry={refresh} />
+  const recommendation = report.recommendations
   return (
     <div className="space-y-6">
       <SectionHeader
@@ -327,16 +386,24 @@ export function RecommendationsPage() {
         title="Problem recommendations"
         description="No random ladders. Every recommendation has a reason."
         action={
-          <Button>
+          <Button onClick={() => refresh()}>
             <Sparkles size={15} /> Refresh picks
           </Button>
         }
       />
       <Card className="p-5">
         <Filters />
+        <div className="mt-4 flex flex-wrap gap-2">
+          {recommendation.focusTopics.map((topic) => (
+            <Badge key={topic.topic} tone="cyan">
+              Focus · {topic.topic}
+            </Badge>
+          ))}
+          <Badge tone="amber">Range · {recommendation.recommendedRatingRange.bucket}</Badge>
+        </div>
       </Card>
       <div className="grid gap-4 lg:grid-cols-2">
-        {recommendations.map((p, i) => (
+        {recommendation.recommendedProblems.map((p, i) => (
           <Card
             key={p.id}
             className="group p-5 transition hover:-translate-y-0.5 hover:border-cyan-400/20"
@@ -362,9 +429,11 @@ export function RecommendationsPage() {
               </p>
               <p className="mt-1 text-sm leading-6 text-slate-400">{p.reason}</p>
             </div>
-            <Button variant="secondary" size="sm" className="mt-4">
-              Solve on Codeforces <ExternalLink size={13} />
-            </Button>
+            <a href={p.url || undefined} target="_blank" rel="noreferrer">
+              <Button variant="secondary" size="sm" className="mt-4">
+                Solve on Codeforces <ExternalLink size={13} />
+              </Button>
+            </a>
           </Card>
         ))}
       </div>
@@ -373,6 +442,54 @@ export function RecommendationsPage() {
 }
 
 export function ProgressPage() {
+  const { user: account } = useAuth()
+  const [progress, setProgress] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  async function loadProgress() {
+    if (!account?.codeforcesHandle) {
+      setError('Add a Codeforces handle before viewing progress.')
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    setError('')
+    try {
+      setProgress(await progressApi.get(account.codeforcesHandle))
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadProgress()
+    // Reload when the tracked handle changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account?.codeforcesHandle])
+
+  if (!progress) return <DataState loading={loading} error={error} onRetry={loadProgress} />
+
+  if (!progress.hasEnoughData) {
+    return (
+      <div className="space-y-6">
+        <SectionHeader
+          eyebrow="Momentum over time"
+          title="Progress tracking"
+          description="Save at least two reports to compare real performance snapshots."
+        />
+        <Card className="p-8 text-center">
+          <p className="text-3xl font-semibold text-cyan-300">{progress.reportCount}</p>
+          <p className="mt-2 text-sm text-slate-500">saved report snapshots available</p>
+        </Card>
+      </div>
+    )
+  }
+
+  const first = progress.points[0]
+  const latest = progress.points.at(-1)
   return (
     <div className="space-y-6">
       <SectionHeader
@@ -386,40 +503,56 @@ export function ProgressPage() {
           </Select>
         }
       />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <StatCard label="Solved this week" value="12" icon={CheckCircle2} change="+4" />
-        <StatCard label="Current AC rate" value="75%" icon={Target} change="+6%" />
-        <StatCard label="Rating gained" value="+133" icon={TrendingUp} change="12.1%" />
-        <StatCard label="Problems upsolved" value="37" icon={RefreshCw} change="+11" />
-        <StatCard label="Current streak" value="9 days" icon={Flame} caption="Personal best · 14" />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Solved problems" value={latest.solved} icon={CheckCircle2} />
+        <StatCard
+          label="Solved improvement"
+          value={`+${latest.solved - first.solved}`}
+          icon={Target}
+        />
+        <StatCard
+          label="Rating change"
+          value={`${(latest.rating || 0) - (first.rating || 0) >= 0 ? '+' : ''}${(latest.rating || 0) - (first.rating || 0)}`}
+          icon={TrendingUp}
+        />
+        <StatCard
+          label="Weakness change"
+          value={latest.weakness - first.weakness}
+          icon={TrendingDown}
+          caption="Lower is better"
+        />
       </div>
       <div className="grid gap-4 xl:grid-cols-2">
-        <ChartCard title="Weekly solved count" subtitle="Solved and attempted">
-          <TrendChart data={progressData} dataKey="solved" secondary="attempted" />
+        <ChartCard title="Solved count trend" subtitle="Saved report snapshots">
+          <TrendChart data={progress.points} dataKey="solved" />
         </ChartCard>
-        <ChartCard title="Rating progression" subtitle="Six-month change">
-          <TrendChart data={progressData} dataKey="rating" />
-        </ChartCard>
-        <ChartCard title="AC rate trend">
-          <TrendChart data={progressData} dataKey="ac" />
+        <ChartCard title="Rating progression" subtitle="Saved report snapshots">
+          <TrendChart data={progress.points} dataKey="rating" />
         </ChartCard>
         <ChartCard title="Weakness score trend" subtitle="Lower is better">
-          <TrendChart data={progressData} dataKey="weakness" />
+          <TrendChart data={progress.points} dataKey="weakness" />
         </ChartCard>
+        <Card className="p-6">
+          <SectionHeader
+            title="Topic improvement"
+            description="Positive means weakness decreased"
+          />
+          <div className="space-y-3">
+            {progress.topicImprovement.slice(0, 6).map((topic) => (
+              <div
+                key={topic.topic}
+                className="flex items-center justify-between rounded-xl bg-black/20 p-3"
+              >
+                <span className="text-sm">{topic.topic}</span>
+                <Badge tone={topic.improvement > 0 ? 'green' : 'amber'}>
+                  {topic.improvement > 0 ? '+' : ''}
+                  {topic.improvement}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </Card>
       </div>
-      <Card className="p-6">
-        <SectionHeader
-          title="Before vs. now"
-          description="Your improvement since starting focused practice"
-        />
-        <div className="grid items-center gap-6 md:grid-cols-[1fr_auto_1fr_auto_1fr]">
-          <Metric label="Previous weakness" value="78" sub="January" />
-          <ArrowRight className="hidden text-slate-700 md:block" />
-          <Metric label="Current weakness" value="49" sub="June" accent />
-          <ArrowRight className="hidden text-slate-700 md:block" />
-          <Metric label="Improvement" value="37.2%" sub="29 points lower" positive />
-        </div>
-      </Card>
     </div>
   )
 }
@@ -662,16 +795,59 @@ function getSettings(tab) {
 }
 
 export function ReportDetailsPage() {
+  const { id } = useParams()
+  const { user: account } = useAuth()
+  const [report, setReport] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  async function loadReport() {
+    setLoading(true)
+    setError('')
+    try {
+      const nextReport =
+        id === 'latest' ? await reportApi.latest(account.codeforcesHandle) : await reportApi.get(id)
+      setReport(nextReport)
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadReport()
+    // Report identity is controlled by the route.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, account?.codeforcesHandle])
+
+  if (!report) return <DataState loading={loading} error={error} onRetry={loadReport} />
+
+  const topics = report.topicAnalysis || []
+  const weakness = topics.length
+    ? Math.round(
+        topics.reduce((total, topic) => total + topic.weakness * topic.attempted, 0) /
+          topics.reduce((total, topic) => total + topic.attempted, 0),
+      )
+    : 0
+  const ratingProgress = (report.summary.ratingHistory || []).slice(-12).map((change) => ({
+    month: new Date(change.changedAt).toLocaleDateString(undefined, { month: 'short' }),
+    rating: change.newRating,
+  }))
+  const queue = (report.upsolvingProblems || []).map((problem) => ({
+    ...problem,
+    verdict: displayVerdict(problem.lastVerdict),
+  }))
   return (
     <div className="space-y-6">
       <SectionHeader
-        eyebrow="Generated June 28, 2026 · 14:32 IST"
+        eyebrow={`Generated ${new Date(report.generatedAt).toLocaleString()}`}
         title="Full performance report"
-        description="A complete snapshot of raghav_setia based on 411 submissions."
+        description={`A saved snapshot of ${report.handle} based on ${report.summary.totalSubmissions} submissions.`}
         action={
           <div className="flex gap-2">
-            <Button variant="secondary">
-              <Save size={15} /> Save
+            <Button variant="secondary" disabled>
+              <Save size={15} /> Saved
             </Button>
             <Button>
               <Download size={15} /> Export PDF
@@ -680,29 +856,41 @@ export function ReportDetailsPage() {
         }
       />
       <InsightBanner>
-        Your performance is trending upward, with a 12.1% rating gain over six months. The strongest
-        path to 1600 is improving DP modeling and increasing conversion in the 1400–1600 band.
+        {report.recommendations?.practiceStrategy?.[0] ||
+          'Use the verified analytics below to choose the next focused practice block.'}
       </InsightBanner>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Performance score" value="72 / 100" icon={Trophy} change="+8" />
-        <StatCard label="Weakness score" value="49 / 100" icon={TrendingDown} change="-29" />
-        <StatCard label="Current rating" value="1,231" icon={Activity} change="+133" />
-        <StatCard label="Target gap" value="369" icon={Target} caption="To Expert" />
+        <StatCard label="Solved problems" value={report.summary.solvedProblems} icon={Trophy} />
+        <StatCard label="Weakness score" value={`${weakness} / 100`} icon={TrendingDown} />
+        <StatCard
+          label="Current rating"
+          value={report.profile.rating ?? 'Unrated'}
+          icon={Activity}
+        />
+        <StatCard
+          label="Target gap"
+          value={Math.max((account.targetRating || 1600) - (report.profile.rating || 0), 0)}
+          icon={Target}
+          caption={`To ${account.targetRating || 1600}`}
+        />
       </div>
       <div className="grid gap-4 xl:grid-cols-2">
         <ChartCard title="Weak topic analysis">
-          <BarChartView data={topicData} dataKey="weakness" nameKey="short" color="#fb7185" />
+          <BarChartView
+            data={topics.slice(0, 10)}
+            dataKey="weakness"
+            nameKey="short"
+            color="#fb7185"
+          />
         </ChartCard>
         <ChartCard title="Rating gap analysis">
-          <TrendChart data={progressData} dataKey="rating" />
+          <TrendChart data={ratingProgress} dataKey="rating" />
         </ChartCard>
         <ChartCard title="Verdict analysis">
-          <DonutChart data={verdictData} />
+          <DonutChart data={report.verdictAnalysis.distribution || []} />
         </ChartCard>
         <AIResponseCard title="AI recommendation summary">
-          Spend the next two weeks on DP state definition and graph modeling at 1300–1500. Upsolve
-          the top six failed contest problems before adding new high-difficulty material. Keep one
-          weekly virtual contest to test transfer under time pressure.
+          {(report.recommendations?.practiceStrategy || []).join(' ')}
         </AIResponseCard>
       </div>
       <Card>
@@ -712,7 +900,7 @@ export function ReportDetailsPage() {
             description="Highest-learning-value unsolved attempts"
           />
         </div>
-        <ProblemTable problems={problems.slice(0, 3)} />
+        <ProblemTable problems={queue.slice(0, 5)} />
       </Card>
     </div>
   )

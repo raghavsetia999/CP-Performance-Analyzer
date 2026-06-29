@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
+import React, { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Activity,
   AlertTriangle,
@@ -34,82 +34,192 @@ import {
   VerdictBadge,
   WeaknessCard,
 } from '../components/AppComponents'
-import {
-  problems,
-  progressData,
-  ratingData,
-  recentActivity,
-  topicData,
-  user,
-  verdictData,
-} from '../data/mockData'
+import { problems, progressData, ratingData, topicData, verdictData } from '../data/mockData'
+import { useAuth } from '../context/AuthContext'
+import { useAnalytics } from '../context/AnalyticsContext'
+import { analyticsApi } from '../services/analyticsApi'
+import { getApiErrorMessage } from '../services/apiClient'
+import { reportApi } from '../services/reportApi'
+
+function formatVerdict(verdict) {
+  const labels = {
+    OK: 'Accepted',
+    WRONG_ANSWER: 'Wrong answer',
+    TIME_LIMIT_EXCEEDED: 'Time limit',
+    COMPILATION_ERROR: 'Compilation error',
+    RUNTIME_ERROR: 'Runtime error',
+    MEMORY_LIMIT_EXCEEDED: 'Memory limit',
+  }
+  return labels[verdict] || String(verdict || 'Unknown').replaceAll('_', ' ')
+}
+
+function formatRelativeTime(value) {
+  if (!value) return 'Unknown'
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000))
+  if (seconds < 60) return 'Just now'
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`
+  return `${Math.floor(seconds / 86400)} days ago`
+}
+
+function AnalyticsState({ loading, error, onRetry }) {
+  if (loading) return <LoadingState />
+  return (
+    <Card className="flex gap-4 border-rose-400/20 bg-rose-400/[.04] p-5">
+      <XCircle className="shrink-0 text-rose-300" />
+      <div>
+        <h2 className="font-semibold text-rose-200">Live analytics unavailable</h2>
+        <p className="mt-1 text-sm text-slate-500">{error || 'No analysis is loaded yet.'}</p>
+        <Button className="mt-4" size="sm" onClick={() => onRetry()}>
+          Retry
+        </Button>
+      </div>
+    </Card>
+  )
+}
 
 export function DashboardPage() {
+  const { user: account } = useAuth()
+  const [summary, setSummary] = useState(null)
+  const [state, setState] = useState('loading')
+  const [errorMessage, setErrorMessage] = useState('')
+  const handle = account?.codeforcesHandle
+
+  async function loadDashboard() {
+    if (!handle) {
+      setErrorMessage('Add your Codeforces handle in onboarding before loading the dashboard.')
+      setState('error')
+      return
+    }
+
+    setState('loading')
+    setErrorMessage('')
+    try {
+      setSummary(await analyticsApi.getSummary(handle))
+      setState('ready')
+    } catch (requestError) {
+      setErrorMessage(getApiErrorMessage(requestError))
+      setState('error')
+    }
+  }
+
+  useEffect(() => {
+    loadDashboard()
+    // The saved handle is the identity of this dashboard snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handle])
+
+  if (state === 'loading') {
+    return (
+      <div className="space-y-6">
+        <SectionHeader
+          eyebrow="Live Codeforces data"
+          title={`Loading ${handle || 'your handle'}`}
+          description="Fetching and analyzing the latest public submission history."
+        />
+        <LoadingState />
+      </div>
+    )
+  }
+
+  if (state === 'error') {
+    return (
+      <div className="space-y-6">
+        <SectionHeader eyebrow="Dashboard" title="Performance overview" />
+        <Card className="flex gap-4 border-rose-400/20 bg-rose-400/[.04] p-5">
+          <XCircle className="shrink-0 text-rose-300" />
+          <div className="flex-1">
+            <h2 className="font-semibold text-rose-200">Could not load live data</h2>
+            <p className="mt-1 text-sm text-slate-500">{errorMessage}</p>
+            <Button className="mt-4" size="sm" onClick={loadDashboard}>
+              Retry
+            </Button>
+          </div>
+        </Card>
+      </div>
+    )
+  }
+
+  const profile = summary.profile
+  const ratingGap = Math.max((account.targetRating || 1600) - (profile.rating || 0), 0)
+  const ratingProgress = summary.ratingHistory.slice(-12).map((change) => ({
+    month: new Date(change.changedAt).toLocaleDateString(undefined, {
+      month: 'short',
+      year: '2-digit',
+    }),
+    rating: change.newRating,
+  }))
+  const topWeakness = summary.topWeaknesses[0]
+
   return (
     <div className="space-y-6">
       <Card className="relative overflow-hidden p-6 sm:p-7">
         <div className="absolute right-0 top-0 h-full w-1/2 bg-gradient-to-l from-cyan-400/[.07] to-transparent" />
         <div className="relative flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
           <div>
-            <Badge tone="green">● Synced 6 min ago</Badge>
+            <Badge tone="green">● Live Codeforces data</Badge>
             <h2 className="mt-3 text-2xl font-semibold tracking-tight">
-              Welcome back, {user.handle} <span className="text-slate-600">/</span>
+              Welcome back, {profile.handle} <span className="text-slate-600">/</span>
             </h2>
             <p className="mt-1 text-sm text-slate-500">
-              You’re 369 points away from your target. Let’s close the gap.
+              {profile.rating == null
+                ? 'Your profile is currently unrated.'
+                : `You’re ${ratingGap} points away from your ${account.targetRating || 1600} target.`}
             </p>
           </div>
-          <Button>
-            <RefreshCw size={16} /> Refresh Codeforces data
+          <Button onClick={loadDashboard}>
+            <RefreshCw size={16} /> Refresh live data
           </Button>
         </div>
       </Card>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-        <StatCard label="Total submissions" value="411" icon={Code2} change="+12.8%" />
-        <StatCard label="Accepted problems" value="218" icon={CheckCircle2} change="+18 this mo." />
-        <StatCard label="Current rating" value="1,231" icon={BarChart3} change="+37" />
-        <StatCard label="Max rating" value="1,310" icon={Trophy} caption="Pupil" />
-        <StatCard label="Avg attempts / AC" value="1.89" icon={Target} change="-0.16" />
+        <StatCard label="Total submissions" value={summary.totalSubmissions} icon={Code2} />
+        <StatCard label="Solved problems" value={summary.solvedProblems} icon={CheckCircle2} />
+        <StatCard label="Current rating" value={profile.rating ?? 'Unrated'} icon={BarChart3} />
+        <StatCard
+          label="Max rating"
+          value={profile.maxRating ?? 'Unrated'}
+          icon={Trophy}
+          caption={profile.rank}
+        />
+        <StatCard label="Problem AC rate" value={`${summary.acRate}%`} icon={Target} />
         <StatCard
           label="Unsolved attempts"
-          value="14"
+          value={summary.unsolvedAttemptedProblems}
           icon={AlertTriangle}
-          caption="6 high priority"
+          caption="Unique problems"
         />
       </div>
       <div className="grid gap-4 xl:grid-cols-2">
         <ChartCard title="Topic-wise weakness" subtitle="Higher score means more attention needed">
-          <BarChartView data={topicData} dataKey="weakness" nameKey="short" color="#8b5cf6" />
+          <BarChartView
+            data={summary.topWeaknesses}
+            dataKey="weakness"
+            nameKey="short"
+            color="#8b5cf6"
+          />
         </ChartCard>
-        <ChartCard
-          title="Rating-wise success rate"
-          subtitle="Accepted problems / attempted problems"
-        >
-          <BarChartView data={ratingData} />
-        </ChartCard>
-        <ChartCard title="Verdict distribution" subtitle="Last 411 submissions">
-          <DonutChart data={verdictData} />
-        </ChartCard>
-        <ChartCard title="Solved vs. attempted" subtitle="Six-month submission trend">
-          <TrendChart data={progressData} dataKey="solved" secondary="attempted" />
+        <ChartCard title="Rating progress" subtitle="Your latest rated contests">
+          <TrendChart data={ratingProgress} />
         </ChartCard>
       </div>
       <InsightBanner>
-        Your biggest current weakness is{' '}
-        <strong className="text-white">Dynamic Programming in the 1300–1500 range</strong>. Your
-        solve rate drops to 38% there, and 7 previously attempted problems remain unsolved. Start
-        with a 3-problem transition-pattern drill.
+        {topWeakness ? (
+          <>
+            Your highest current weakness is{' '}
+            <strong className="text-white">{topWeakness.topic}</strong>, with a score of{' '}
+            {topWeakness.weakness}/100 and a {topWeakness.rate}% problem conversion rate.
+          </>
+        ) : (
+          'Not enough tagged submissions are available to calculate topic weaknesses.'
+        )}
       </InsightBanner>
       <Card>
         <div className="p-5">
           <SectionHeader
             title="Recent activity"
             description="Your latest Codeforces submissions"
-            action={
-              <Button variant="ghost" size="sm">
-                View all <ArrowRight size={14} />
-              </Button>
-            }
+            action={<Badge tone="cyan">Latest {summary.recentActivity.length}</Badge>}
           />
         </div>
         <div className="overflow-x-auto">
@@ -123,19 +233,29 @@ export function DashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {recentActivity.map((x) => (
-                <tr key={x.id} className="border-b border-white/[.04] last:border-0">
+              {summary.recentActivity.map((activity) => (
+                <tr
+                  key={activity.submissionId}
+                  className="border-b border-white/[.04] last:border-0"
+                >
                   <td className="px-5 py-4">
-                    <p className="font-medium">{x.problem}</p>
-                    <p className="font-mono text-xs text-slate-600">{x.id}</p>
+                    <a
+                      href={activity.url || undefined}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-medium hover:text-cyan-300"
+                    >
+                      {activity.name}
+                    </a>
+                    <p className="font-mono text-xs text-slate-600">{activity.problemKey}</p>
                   </td>
                   <td className="px-4">
-                    <RatingBadge>{x.rating}</RatingBadge>
+                    <RatingBadge>{activity.rating ?? 'Unrated'}</RatingBadge>
                   </td>
                   <td className="px-4">
-                    <VerdictBadge>{x.verdict}</VerdictBadge>
+                    <VerdictBadge>{formatVerdict(activity.verdict)}</VerdictBadge>
                   </td>
-                  <td className="px-4 text-slate-500">{x.time}</td>
+                  <td className="px-4 text-slate-500">{formatRelativeTime(activity.createdAt)}</td>
                 </tr>
               ))}
             </tbody>
@@ -147,19 +267,44 @@ export function DashboardPage() {
 }
 
 export function AnalyzeHandlePage() {
+  const navigate = useNavigate()
+  const { user: account } = useAuth()
   const [state, setState] = useState('idle')
-  const [handle, setHandle] = useState('raghav_setia')
-  function analyze() {
-    if (!handle.trim() || handle.toLowerCase().includes('invalid')) {
+  const [handle, setHandle] = useState(account?.codeforcesHandle || '')
+  const [report, setReport] = useState(null)
+  const [errorMessage, setErrorMessage] = useState('')
+  const [saving, setSaving] = useState(false)
+  async function analyze() {
+    if (!handle.trim()) {
+      setErrorMessage('Enter a Codeforces handle to continue.')
       setState('error')
       return
     }
+    setErrorMessage('')
     setState('loading')
-    setTimeout(() => setState('done'), 900)
+    try {
+      setReport(await analyticsApi.analyze(handle.trim()))
+      setState('done')
+    } catch (requestError) {
+      setErrorMessage(getApiErrorMessage(requestError))
+      setState('error')
+    }
   }
   function chooseHandle(value) {
     setHandle(value)
     setState('idle')
+  }
+  async function saveReport() {
+    setSaving(true)
+    setErrorMessage('')
+    try {
+      const saved = await reportApi.save(handle.trim())
+      navigate(`/report/${saved.id || saved._id}`)
+    } catch (requestError) {
+      setErrorMessage(getApiErrorMessage(requestError))
+    } finally {
+      setSaving(false)
+    }
   }
   return (
     <div className="space-y-6">
@@ -214,10 +359,8 @@ export function AnalyzeHandlePage() {
         <Card className="flex gap-4 border-rose-400/20 bg-rose-400/[.04] p-5">
           <XCircle className="shrink-0 text-rose-300" />
           <div>
-            <h3 className="font-semibold text-rose-200">Handle not found</h3>
-            <p className="mt-1 text-sm text-slate-500">
-              Check the spelling and try again. Codeforces handles are case-sensitive.
-            </p>
+            <h3 className="font-semibold text-rose-200">Analysis failed</h3>
+            <p className="mt-1 text-sm text-slate-500">{errorMessage}</p>
           </div>
         </Card>
       )}
@@ -245,18 +388,20 @@ export function AnalyzeHandlePage() {
                     <h2 className="text-xl font-semibold">{handle}</h2>
                     <Badge tone="green">Valid handle</Badge>
                   </div>
-                  <p className="mt-1 text-sm text-slate-500">{user.rank} · India</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {report.summary.profile.rank} · {report.summary.profile.country || 'Codeforces'}
+                  </p>
                 </div>
               </div>
             </div>
             <div className="grid gap-px bg-white/[.05] sm:grid-cols-3 lg:grid-cols-6">
               {[
                 ['Handle', handle],
-                ['Rank', user.rank],
-                ['Rating', user.rating],
-                ['Max rating', user.maxRating],
-                ['Contribution', `+${user.contribution}`],
-                ['Friends', user.friends],
+                ['Rank', report.summary.profile.rank],
+                ['Rating', report.summary.profile.rating ?? 'Unrated'],
+                ['Max rating', report.summary.profile.maxRating ?? 'Unrated'],
+                ['Contribution', report.summary.profile.contribution],
+                ['Friends', report.summary.profile.friendOfCount],
               ].map(([l, v]) => (
                 <div key={l} className="bg-[#0e131d] p-5">
                   <p className="text-xs text-slate-600">{l}</p>
@@ -266,16 +411,22 @@ export function AnalyzeHandlePage() {
             </div>
           </Card>
           <InsightBanner>
-            We found <strong className="text-white">411 submissions across 332 problems</strong>. DP
-            and graphs are the clearest improvement opportunities, especially above 1300 rating.
+            We found{' '}
+            <strong className="text-white">
+              {report.summary.totalSubmissions} submissions across{' '}
+              {report.summary.attemptedProblems} problems
+            </strong>
+            .{' '}
+            {report.topicAnalysis[0]
+              ? `${report.topicAnalysis[0].topic} is currently the highest-scoring weakness.`
+              : 'There is not enough tagged activity to rank weaknesses yet.'}
           </InsightBanner>
           <div className="flex justify-end">
-            <Link to="/report/latest">
-              <Button>
-                Open full report <ArrowRight size={16} />
-              </Button>
-            </Link>
+            <Button onClick={saveReport} disabled={saving}>
+              {saving ? 'Saving report…' : 'Save full report'} <ArrowRight size={16} />
+            </Button>
           </div>
+          {errorMessage && <p className="text-right text-sm text-rose-300">{errorMessage}</p>}
         </>
       )}
     </div>
@@ -283,22 +434,36 @@ export function AnalyzeHandlePage() {
 }
 
 export function WeaknessReportPage() {
+  const { report, loading, error, refresh } = useAnalytics()
+  if (!report) return <AnalyticsState loading={loading} error={error} onRetry={refresh} />
+  const topics = report.topicAnalysis
+  const overallWeakness = topics.length
+    ? Math.round(
+        topics.reduce((total, topic) => total + topic.weakness * topic.attempted, 0) /
+          topics.reduce((total, topic) => total + topic.attempted, 0),
+      )
+    : 0
   return (
     <div className="space-y-6">
       <SectionHeader
         eyebrow="Performance diagnosis"
         title="Weakness report"
         description="Topics ranked by friction, recency, and conversion rate."
-        action={<Badge tone="amber">Overall score · 68 / 100</Badge>}
+        action={<Badge tone="amber">Overall score · {overallWeakness} / 100</Badge>}
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        {topicData.map((x) => (
+        {topics.slice(0, 10).map((x) => (
           <WeaknessCard key={x.topic} item={x} />
         ))}
       </div>
       <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
         <ChartCard title="Weakness score by topic" subtitle="Composite score from 0–100">
-          <BarChartView data={topicData} dataKey="weakness" nameKey="short" color="#fb7185" />
+          <BarChartView
+            data={topics.slice(0, 10)}
+            dataKey="weakness"
+            nameKey="short"
+            color="#fb7185"
+          />
         </ChartCard>
         <Card className="p-6">
           <div className="flex gap-3">
@@ -314,10 +479,10 @@ export function WeaknessReportPage() {
           <div className="mt-6 space-y-4">
             {[
               ['Solve conversion', 35],
-              ['Failed attempts', 25],
-              ['Difficulty gap', 20],
-              ['Recency', 12],
-              ['Abandoned problems', 8],
+              ['Retry pressure', 20],
+              ['Unsolved problems', 25],
+              ['Verdict pattern', 10],
+              ['Recency', 10],
             ].map(([x, v]) => (
               <div key={x}>
                 <div className="mb-1 flex justify-between text-xs">
@@ -363,7 +528,7 @@ export function WeaknessReportPage() {
               </tr>
             </thead>
             <tbody>
-              {topicData.map((x) => (
+              {topics.map((x) => (
                 <tr key={x.topic} className="border-b border-white/[.04] last:border-0">
                   <td className="px-5 py-4 font-medium">{x.topic}</td>
                   <td className="px-5 text-slate-400">{x.attempted}</td>
@@ -379,7 +544,7 @@ export function WeaknessReportPage() {
                       {x.weakness}
                     </Badge>
                   </td>
-                  <td className="px-5 text-slate-500">{x.last}</td>
+                  <td className="px-5 text-slate-500">{formatRelativeTime(x.last)}</td>
                 </tr>
               ))}
             </tbody>
@@ -391,6 +556,16 @@ export function WeaknessReportPage() {
 }
 
 export function RatingAnalysisPage() {
+  const { report, loading, error, refresh } = useAnalytics()
+  if (!report) return <AnalyticsState loading={loading} error={error} onRetry={refresh} />
+  const buckets = report.ratingAnalysis
+  const gap = buckets
+    .filter((bucket) => bucket.attempted > 0)
+    .sort((left, right) => right.weakness - left.weakness)[0]
+  const ratingProgress = report.summary.ratingHistory.slice(-12).map((change) => ({
+    month: new Date(change.changedAt).toLocaleDateString(undefined, { month: 'short' }),
+    rating: change.newRating,
+  }))
   return (
     <div className="space-y-6">
       <SectionHeader
@@ -398,12 +573,12 @@ export function RatingAnalysisPage() {
         title="Rating analysis"
         description="Find the exact rating band where confidence turns into friction."
       />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        {ratingData.map((x, i) => (
-          <Card key={x.bucket} className={`p-5 ${i === 3 ? 'border-amber-400/20' : ''}`}>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {buckets.map((x) => (
+          <Card key={x.key} className={`p-5 ${gap?.key === x.key ? 'border-amber-400/20' : ''}`}>
             <div className="flex justify-between">
               <RatingBadge>{x.bucket}</RatingBadge>
-              {i === 3 && <Badge tone="amber">Gap</Badge>}
+              {gap?.key === x.key && <Badge tone="amber">Gap</Badge>}
             </div>
             <p className="mt-5 text-3xl font-semibold">{x.rate}%</p>
             <p className="text-xs text-slate-600">success rate</p>
@@ -414,20 +589,33 @@ export function RatingAnalysisPage() {
               </span>
               <span>{x.avg} attempts</span>
             </div>
+            {x.weakTags.length > 0 && (
+              <p className="mt-3 text-xs text-slate-600">
+                Weak tags · {x.weakTags.map((tag) => tag.tag).join(', ')}
+              </p>
+            )}
           </Card>
         ))}
       </div>
       <InsightBanner icon={Target}>
-        You’re comfortable through <strong className="text-white">1200</strong>, but success falls
-        sharply after <strong className="text-white">1400</strong>. Build volume in 1300–1400 before
-        pushing harder into 1500.
+        {gap ? (
+          <>
+            Your highest-friction range is <strong className="text-white">{gap.bucket}</strong>,
+            with a {gap.rate}% conversion rate and weakness score of {gap.weakness}/100.
+          </>
+        ) : (
+          'Complete more rated problems to identify a reliable rating gap.'
+        )}
       </InsightBanner>
       <div className="grid gap-4 xl:grid-cols-2">
         <ChartCard title="Success rate by rating bucket">
-          <BarChartView data={ratingData} />
+          <BarChartView data={buckets} />
         </ChartCard>
-        <ChartCard title="Rating progress over time" subtitle="Current 1,231 · Peak 1,310">
-          <TrendChart data={progressData} />
+        <ChartCard
+          title="Rating progress over time"
+          subtitle={`Current ${report.profile.rating ?? 'Unrated'} · Peak ${report.profile.maxRating ?? 'Unrated'}`}
+        >
+          <TrendChart data={ratingProgress} />
         </ChartCard>
       </div>
     </div>
@@ -435,7 +623,12 @@ export function RatingAnalysisPage() {
 }
 
 export function VerdictAnalysisPage() {
-  const total = verdictData.reduce((a, b) => a + b.value, 0)
+  const { report, loading, error, refresh } = useAnalytics()
+  if (!report) return <AnalyticsState loading={loading} error={error} onRetry={refresh} />
+  const verdicts = report.verdictAnalysis
+  const total = verdicts.totalSubmissions
+  const waTags = verdicts.wrongAnswerHeavyTags.map((item) => item.tag)
+  const tleTags = verdicts.timeLimitHeavyTags.map((item) => item.tag)
   return (
     <div className="space-y-6">
       <SectionHeader
@@ -446,27 +639,36 @@ export function VerdictAnalysisPage() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Most common failure"
-          value="Wrong answer"
+          value={verdicts.mostCommonFailedVerdict?.name || 'None'}
           icon={XCircle}
-          caption="31% of submissions"
+          caption={
+            verdicts.mostCommonFailedVerdict
+              ? `${verdicts.mostCommonFailedVerdict.percentage}% of submissions`
+              : 'No failed submissions'
+          }
         />
-        <StatCard label="Wrong attempts before AC" value="1.84" icon={RefreshCw} change="-0.13" />
+        <StatCard
+          label="Failed attempts before AC"
+          value={verdicts.averageFailedAttemptsBeforeAc}
+          icon={RefreshCw}
+          caption="Average per solved problem"
+        />
         <StatCard
           label="TLE-heavy topics"
-          value="DP · Graphs"
+          value={tleTags.slice(0, 2).join(' · ') || 'None'}
           icon={Clock3}
-          caption="21 of 34 TLEs"
+          caption={`${verdicts.timeLimitHeavyTags[0]?.count || 0} top-topic TLEs`}
         />
         <StatCard
           label="WA-heavy topics"
-          value="Greedy · BS"
+          value={waTags.slice(0, 2).join(' · ') || 'None'}
           icon={AlertTriangle}
-          caption="57 of 126 WAs"
+          caption={`${verdicts.wrongAnswerHeavyTags[0]?.count || 0} top-topic WAs`}
         />
       </div>
       <div className="grid gap-4 xl:grid-cols-[.85fr_1.15fr]">
         <ChartCard title="Verdict distribution" subtitle={`${total} total submissions`}>
-          <DonutChart data={verdictData} />
+          <DonutChart data={verdicts.distribution} />
         </ChartCard>
         <Card>
           <div className="p-5">
@@ -484,15 +686,19 @@ export function VerdictAnalysisPage() {
                 </tr>
               </thead>
               <tbody>
-                {verdictData.map((v, i) => (
-                  <tr key={v.name} className="border-b border-white/[.04] last:border-0">
+                {verdicts.distribution.map((v) => (
+                  <tr key={v.key} className="border-b border-white/[.04] last:border-0">
                     <td className="px-5 py-4">
                       <VerdictBadge>{v.name}</VerdictBadge>
                     </td>
                     <td className="px-5 font-mono">{v.value}</td>
-                    <td className="px-5 text-slate-400">{Math.round((v.value / total) * 100)}%</td>
+                    <td className="px-5 text-slate-400">{v.percentage}%</td>
                     <td className="px-5 text-slate-400">
-                      {['Greedy', 'Greedy', 'DP', 'Implementation', 'Graphs'][i]}
+                      {v.key === 'WRONG_ANSWER'
+                        ? waTags[0] || '—'
+                        : v.key === 'TIME_LIMIT_EXCEEDED'
+                          ? tleTags[0] || '—'
+                          : '—'}
                     </td>
                   </tr>
                 ))}
@@ -502,9 +708,9 @@ export function VerdictAnalysisPage() {
         </Card>
       </div>
       <InsightBanner icon={Clock3}>
-        Most of your TLEs occur in <strong className="text-white">DP and graph problems</strong>.
-        The pattern suggests complexity estimation and redundant state exploration are the main
-        causes.
+        {verdicts.firstTrySolvedProblems} problems were solved on the first try, while{' '}
+        <strong className="text-white">{verdicts.multiAttemptSolvedProblems}</strong> required
+        multiple attempts. Review the most painful failures before the next timed set.
       </InsightBanner>
     </div>
   )

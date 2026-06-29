@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Bot, CalendarDays, Check, ChevronRight, RefreshCw, Send, Sparkles } from 'lucide-react'
 import {
   AIResponseCard,
@@ -7,7 +7,10 @@ import {
   SectionHeader,
 } from '../components/AppComponents'
 import { Avatar, Badge, Button, Card, Input, Progress } from '../components/ui'
-import { practicePlan, user } from '../data/mockData'
+import { useAnalytics } from '../context/AnalyticsContext'
+import { useAuth } from '../context/AuthContext'
+import { aiApi } from '../services/aiApi'
+import { getApiErrorMessage } from '../services/apiClient'
 
 const prompts = [
   'Create a 7-day upsolving plan',
@@ -16,28 +19,27 @@ const prompts = [
   'How should I improve contest performance?',
 ]
 
-const coachReplies = {
-  'Create a 7-day upsolving plan':
-    'I’d alternate focused DP and graph drills with one timed mixed set. Keep Friday for your three highest-priority failed problems and Sunday for review.',
-  'Explain why I am weak in DP':
-    'Your recurrence choice is usually sound, but state definition and base cases drive repeated wrong answers. Write the state in one sentence before coding.',
-  'Suggest problems for 1300–1500':
-    'Start with Boredom (455A), Vacations (699C), Magic Powder — 2 (670D2), and Two Buttons (520B). They target your current DP, binary-search, and graph gaps.',
-  'How should I improve contest performance?':
-    'Prioritize clean A/B conversion, set a 12-minute debugging limit, and upsolve every attempted problem within 48 hours.',
-}
-
 export function AICoachPage() {
+  const { user: account } = useAuth()
+  const { report } = useAnalytics()
   const [message, setMessage] = useState('')
   const [chat, setChat] = useState([])
-  function send(value = message) {
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  async function send(value = message) {
     const question = value.trim()
-    if (!question) return
-    const answer =
-      coachReplies[question] ||
-      'Based on your recent history, I would keep the next practice block narrow: one weak topic, three problems, then a short written review of every failed attempt.'
-    setChat((items) => [...items, { question, answer }])
-    setMessage('')
+    if (!question || !account?.codeforcesHandle) return
+    setSubmitting(true)
+    setError('')
+    try {
+      const response = await aiApi.chat(account.codeforcesHandle, question)
+      setChat((items) => [...items, { question, answer: response.answer }])
+      setMessage('')
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError))
+    } finally {
+      setSubmitting(false)
+    }
   }
   return (
     <div className="space-y-6">
@@ -45,7 +47,7 @@ export function AICoachPage() {
         eyebrow="Your personal CP strategist"
         title="AI performance coach"
         description="Grounded in your submission history—not generic advice."
-        action={<Badge tone="green">● Context synced</Badge>}
+        action={<Badge tone="green">Rule-based · AI disabled</Badge>}
       />
       <div className="grid gap-4 xl:grid-cols-[320px_1fr]">
         <div className="space-y-4">
@@ -53,16 +55,16 @@ export function AICoachPage() {
             <div className="flex items-center gap-3">
               <Avatar />
               <div>
-                <p className="font-semibold">{user.handle}</p>
+                <p className="font-semibold">{account?.codeforcesHandle || 'No handle'}</p>
                 <p className="text-xs text-slate-500">Performance context</p>
               </div>
             </div>
             <div className="mt-5 space-y-4">
               {[
-                ['Current rating', '1,231'],
-                ['Target rating', '1,600'],
-                ['Weekly time', '7 hours'],
-                ['Problems solved', '218'],
+                ['Current rating', report?.profile.rating ?? '—'],
+                ['Target rating', account?.targetRating ?? '—'],
+                ['Daily time', `${account?.preferredPracticeMinutes || 60} min`],
+                ['Problems solved', report?.summary.solvedProblems ?? '—'],
               ].map(([label, value]) => (
                 <div key={label} className="flex justify-between text-sm">
                   <span className="text-slate-500">{label}</span>
@@ -72,8 +74,13 @@ export function AICoachPage() {
             </div>
             <div className="mt-5 rounded-xl bg-rose-400/[.06] p-4">
               <p className="text-xs text-slate-500">Top weakness</p>
-              <p className="mt-1 font-medium text-rose-300">Dynamic Programming</p>
-              <Progress value={88} className="mt-3 [&>div]:from-rose-400 [&>div]:to-amber-400" />
+              <p className="mt-1 font-medium text-rose-300">
+                {report?.recommendations.focusTopics[0]?.topic || 'Not enough data'}
+              </p>
+              <Progress
+                value={report?.recommendations.focusTopics[0]?.weakness || 0}
+                className="mt-3 [&>div]:from-rose-400 [&>div]:to-amber-400"
+              />
             </div>
           </Card>
           <Card className="p-5">
@@ -99,7 +106,7 @@ export function AICoachPage() {
             </div>
             <div>
               <p className="font-semibold">CP Pulse Coach</p>
-              <p className="text-xs text-emerald-400">● Ready with your latest data</p>
+              <p className="text-xs text-emerald-400">● Deterministic coach ready</p>
             </div>
           </div>
           <div className="flex-1 space-y-5 overflow-y-auto p-5 sm:p-7">
@@ -108,17 +115,17 @@ export function AICoachPage() {
                 <Sparkles size={16} />
               </div>
               <div className="rounded-2xl rounded-tl-sm bg-white/[.045] p-4 text-sm leading-6 text-slate-300">
-                I’ve reviewed your latest 411 submissions. Your clearest opportunity is reducing
-                repeated wrong attempts in DP and graphs.
+                I’m using your verified analytics and deterministic rules. No external AI provider
+                is enabled in this phase.
               </div>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
-              <AIResponseCard title="Why DP feels difficult">
-                You often identify the recurrence but lose accuracy in state definition and base
-                cases.
+              <AIResponseCard title="Primary focus">
+                {report?.recommendations.practiceStrategy[0] || 'Generate an analysis first.'}
               </AIResponseCard>
-              <AIResponseCard title="Starting problems">
-                Begin with Boredom (455A), Vacations (699C), and Flowers (474D).
+              <AIResponseCard title="Upsolving direction">
+                {report?.recommendations.upsolvingPriority[0]?.reason ||
+                  'No unfinished attempted problem is currently prioritized.'}
               </AIResponseCard>
             </div>
             {chat.map((item, index) => (
@@ -131,6 +138,7 @@ export function AICoachPage() {
                 </div>
               </div>
             ))}
+            {error && <p className="text-sm text-rose-300">{error}</p>}
           </div>
           <form
             className="border-t border-white/[.06] p-4"
@@ -145,12 +153,16 @@ export function AICoachPage() {
                 onChange={(event) => setMessage(event.target.value)}
                 placeholder="Ask about your performance or request a plan…"
               />
-              <Button size="icon" aria-label="Send message" disabled={!message.trim()}>
+              <Button
+                size="icon"
+                aria-label="Send message"
+                disabled={!message.trim() || submitting}
+              >
                 <Send size={17} />
               </Button>
             </div>
             <p className="mt-2 text-center text-[10px] text-slate-700">
-              Advice is generated from mock performance data in this demo.
+              Rule-based response · external AI is disabled.
             </p>
           </form>
         </Card>
@@ -160,10 +172,14 @@ export function AICoachPage() {
 }
 
 export function PracticePlanPage() {
-  const [tasks, setTasks] = useState(() => practicePlan.map((item) => ({ ...item })))
+  const { user: account } = useAuth()
+  const [tasks, setTasks] = useState([])
   const [view, setView] = useState('cards')
+  const [overview, setOverview] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const completed = tasks.filter((item) => item.done).length
-  const percent = Math.round((completed / tasks.length) * 100)
+  const percent = tasks.length ? Math.round((completed / tasks.length) * 100) : 0
   const solved = useMemo(
     () => tasks.filter((item) => item.done).reduce((sum, item) => sum + item.count, 0),
     [tasks],
@@ -173,13 +189,39 @@ export function PracticePlanPage() {
       items.map((item) => (item.day === day ? { ...item, done: !item.done } : item)),
     )
   }
-  function regenerate() {
-    setTasks(practicePlan.map((item) => ({ ...item, done: false })))
+  async function regenerate() {
+    if (!account?.codeforcesHandle) return
+    setLoading(true)
+    setError('')
+    try {
+      const response = await aiApi.practicePlan(
+        account.codeforcesHandle,
+        account.preferredPracticeMinutes,
+      )
+      setTasks(response.plan)
+      setOverview(response.overview)
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    regenerate()
+    // Regenerate when the tracked handle changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account?.codeforcesHandle])
+
+  if (loading && !tasks.length) {
+    return (
+      <Card className="p-8 text-center text-sm text-slate-500">Generating rule-based plan…</Card>
+    )
   }
   return (
     <div className="space-y-6">
       <SectionHeader
-        eyebrow="Week of June 29"
+        eyebrow="Rule-based weekly plan"
         title="Your 7-day practice plan"
         description="One focused hour per day, shaped around your highest-leverage gaps."
         action={
@@ -195,12 +237,13 @@ export function PracticePlanPage() {
           </div>
         }
       />
+      {error && <Card className="border-rose-400/20 p-4 text-sm text-rose-300">{error}</Card>}
       <Card className="p-5">
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
           <div>
             <p className="text-sm font-semibold">Weekly progress</p>
             <p className="mt-1 text-xs text-slate-500">
-              {completed} of 7 daily goals completed · {solved} of 25 problems solved
+              {completed} of {tasks.length} daily goals completed · {solved} planned problems done
             </p>
           </div>
           <span className="font-mono text-2xl font-semibold text-cyan-300">{percent}%</span>
@@ -265,8 +308,7 @@ export function PracticePlanPage() {
         ))}
       </div>
       <InsightBanner>
-        Keep the plan deliberately narrow. The goal this week is not raw volume—it is proving you
-        can define DP states cleanly and convert 1300–1400 problems with fewer retries.
+        {overview || 'The plan is generated from your current analytics without external AI.'}
       </InsightBanner>
     </div>
   )
