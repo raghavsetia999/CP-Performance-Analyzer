@@ -3,7 +3,10 @@ import {
   answerCoachQuestion,
   generatePracticePlanFromReport,
 } from '../../src/modules/ai/ai.engine.js'
-import { buildRecommendations } from '../../src/modules/recommendation/recommendation.engine.js'
+import {
+  buildRecommendations,
+  rankUnseenProblems,
+} from '../../src/modules/recommendation/recommendation.engine.js'
 
 const recommendationInput = {
   topicAnalysis: [
@@ -37,6 +40,40 @@ describe('recommendation engine', () => {
     expect(result.focusTopics[0].topic).toBe('Dynamic Programming')
     expect(result.recommendedRatingRange.bucket).toBe('1200–1400')
     expect(result.recommendedProblems[0].problemKey).toBe('100-A')
+  })
+
+  it('ranks unseen catalogue problems and excludes attempted problems', () => {
+    const result = rankUnseenProblems({
+      problemCatalog: [
+        {
+          problemKey: '100-A',
+          contestId: 100,
+          index: 'A',
+          name: 'Already tried',
+          rating: 1300,
+          tags: ['dp'],
+          url: 'https://codeforces.com/problemset/problem/100/A',
+        },
+        {
+          problemKey: '200-B',
+          contestId: 200,
+          index: 'B',
+          name: 'Fresh DP problem',
+          rating: 1400,
+          tags: ['dp'],
+          url: 'https://codeforces.com/problemset/problem/200/B',
+        },
+      ],
+      attemptedProblemKeys: ['100-A'],
+      focusTopics: recommendationInput.topicAnalysis,
+      profile: { rating: 1300 },
+    })
+
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      problemKey: '200-B',
+      source: 'unseen_problemset',
+    })
   })
 })
 

@@ -1,28 +1,16 @@
 import React, { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import {
   Activity,
-  ArrowRight,
-  Bot,
-  CalendarDays,
-  Check,
   CheckCircle2,
   ChevronRight,
-  CircleUser,
   Clock3,
   CodeXml,
   Download,
   ExternalLink,
   FileText,
-  Flame,
-  Link2,
-  Lock,
-  MessageSquare,
-  MoreHorizontal,
   RefreshCw,
   Save,
-  Send,
-  Shield,
   Sparkles,
   Target,
   Trash2,
@@ -38,7 +26,6 @@ import {
   ChartCard,
   DonutChart,
   InsightBanner,
-  PracticeDayCard,
   ProblemTable,
   RatingBadge,
   SectionHeader,
@@ -57,20 +44,12 @@ import {
   Select,
   Switch,
 } from '../components/ui'
-import {
-  practicePlan,
-  problems,
-  progressData,
-  recommendations,
-  topicData,
-  user,
-  verdictData,
-} from '../data/mockData'
 import { useAnalytics } from '../context/AnalyticsContext'
 import { useAuth } from '../context/AuthContext'
 import { getApiErrorMessage } from '../services/apiClient'
 import { progressApi } from '../services/progressApi'
 import { reportApi } from '../services/reportApi'
+import { userApi } from '../services/userApi'
 
 function DataState({ loading, error, onRetry }) {
   if (loading) {
@@ -139,7 +118,7 @@ export function UpsolvingPage() {
         title="Upsolving queue"
         description="Unsolved contest attempts ranked by learning value and urgency."
         action={
-          <Button onClick={() => refresh()}>
+          <Button onClick={() => refresh(undefined, { refresh: true })}>
             <RefreshCw size={15} /> Refresh queue
           </Button>
         }
@@ -204,177 +183,6 @@ export function UpsolvingPage() {
   )
 }
 
-const prompts = [
-  'Create a 7-day upsolving plan',
-  'Explain why I am weak in DP',
-  'Suggest problems for 1300–1500',
-  'How should I improve contest performance?',
-]
-export function AICoachPage() {
-  const [msg, setMsg] = useState('')
-  return (
-    <div className="space-y-6">
-      <SectionHeader
-        eyebrow="Your personal CP strategist"
-        title="AI performance coach"
-        description="Grounded in your submission history—not generic advice."
-        action={<Badge tone="green">● Context synced</Badge>}
-      />
-      <div className="grid gap-4 xl:grid-cols-[320px_1fr]">
-        <div className="space-y-4">
-          <Card className="p-5">
-            <div className="flex items-center gap-3">
-              <Avatar />
-              <div>
-                <p className="font-semibold">{user.handle}</p>
-                <p className="text-xs text-slate-500">Performance context</p>
-              </div>
-            </div>
-            <div className="mt-5 space-y-4">
-              {[
-                ['Current rating', '1,231'],
-                ['Target rating', '1,600'],
-                ['Weekly time', '7 hours'],
-                ['Problems solved', '218'],
-              ].map(([l, v]) => (
-                <div key={l} className="flex justify-between text-sm">
-                  <span className="text-slate-500">{l}</span>
-                  <span className="font-medium">{v}</span>
-                </div>
-              ))}
-            </div>
-            <div className="mt-5 rounded-xl bg-rose-400/[.06] p-4">
-              <p className="text-xs text-slate-500">Top weakness</p>
-              <p className="mt-1 font-medium text-rose-300">Dynamic Programming</p>
-              <Progress value={88} className="mt-3 [&>div]:from-rose-400 [&>div]:to-amber-400" />
-            </div>
-          </Card>
-          <Card className="p-5">
-            <p className="text-sm font-semibold">Suggested prompts</p>
-            <div className="mt-3 space-y-2">
-              {prompts.map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setMsg(p)}
-                  className="w-full rounded-xl border border-white/[.06] p-3 text-left text-xs leading-5 text-slate-400 transition hover:border-cyan-400/20 hover:text-white"
-                >
-                  {p}
-                  <ChevronRight size={13} className="float-right mt-1" />
-                </button>
-              ))}
-            </div>
-          </Card>
-        </div>
-        <Card className="flex min-h-[680px] flex-col overflow-hidden">
-          <div className="flex items-center gap-3 border-b border-white/[.06] p-5">
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-cyan-400 to-violet-500 text-slate-950">
-              <Bot />
-            </div>
-            <div>
-              <p className="font-semibold">CP Pulse Coach</p>
-              <p className="text-xs text-emerald-400">● Ready with your latest data</p>
-            </div>
-          </div>
-          <div className="flex-1 space-y-5 overflow-y-auto p-5 sm:p-7">
-            <div className="flex max-w-xl gap-3">
-              <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-violet-400/10 text-violet-300">
-                <Sparkles size={16} />
-              </div>
-              <div className="rounded-2xl rounded-tl-sm bg-white/[.045] p-4 text-sm leading-6 text-slate-300">
-                I’ve reviewed your latest 411 submissions. Your clearest opportunity is reducing
-                repeated wrong attempts in DP and graphs. Here’s the focused picture:
-              </div>
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <AIResponseCard title="Why DP feels difficult">
-                You often identify the right recurrence but lose accuracy in state definition and
-                base cases. This causes 2.8 wrong attempts per accepted DP problem.
-              </AIResponseCard>
-              <AIResponseCard title="Revision focus">
-                Revisit 1D transitions, prefix-state optimization, and recognizing when greedy state
-                compression is valid.
-              </AIResponseCard>
-              <AIResponseCard title="7-day direction">
-                Alternate targeted topic drills with two timed mixed sets. Keep Friday for upsolving
-                your three highest-priority failures.
-              </AIResponseCard>
-              <AIResponseCard title="Starting problems">
-                Begin with Boredom (455A), Vacations (699C), and Flowers (474D), in that order.
-              </AIResponseCard>
-            </div>
-          </div>
-          <div className="border-t border-white/[.06] p-4">
-            <div className="flex gap-2">
-              <Input
-                value={msg}
-                onChange={(e) => setMsg(e.target.value)}
-                placeholder="Ask about your performance or request a plan…"
-              />
-              <Button size="icon">
-                <Send size={17} />
-              </Button>
-            </div>
-            <p className="mt-2 text-center text-[10px] text-slate-700">
-              Advice is generated from mock performance data in this demo.
-            </p>
-          </div>
-        </Card>
-      </div>
-    </div>
-  )
-}
-
-export function PracticePlanPage() {
-  return (
-    <div className="space-y-6">
-      <SectionHeader
-        eyebrow="Week of June 29"
-        title="Your 7-day practice plan"
-        description="One focused hour per day, shaped around your highest-leverage gaps."
-        action={
-          <div className="flex gap-2">
-            <Button variant="secondary">
-              <RefreshCw size={15} /> Regenerate
-            </Button>
-            <Button>
-              <Check size={15} /> Mark week complete
-            </Button>
-          </div>
-        }
-      />
-      <Card className="p-5">
-        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-          <div>
-            <p className="text-sm font-semibold">Weekly progress</p>
-            <p className="mt-1 text-xs text-slate-500">
-              2 of 7 daily goals completed · 7 of 25 problems solved
-            </p>
-          </div>
-          <span className="font-mono text-2xl font-semibold text-cyan-300">28%</span>
-        </div>
-        <Progress value={28} className="mt-4 h-3" />
-      </Card>
-      <div className="flex justify-end gap-2">
-        <Button size="sm" variant="secondary">
-          <CalendarDays size={14} /> Calendar
-        </Button>
-        <Button size="sm" variant="ghost">
-          Cards
-        </Button>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {practicePlan.map((x) => (
-          <PracticeDayCard key={x.day} item={x} />
-        ))}
-      </div>
-      <InsightBanner>
-        Keep the plan deliberately narrow. The goal this week is not raw volume—it is proving you
-        can define DP states cleanly and convert 1300–1400 problems with fewer retries.
-      </InsightBanner>
-    </div>
-  )
-}
-
 export function RecommendationsPage() {
   const { report, loading, error, refresh } = useAnalytics()
   if (!report) return <DataState loading={loading} error={error} onRetry={refresh} />
@@ -386,7 +194,7 @@ export function RecommendationsPage() {
         title="Problem recommendations"
         description="No random ladders. Every recommendation has a reason."
         action={
-          <Button onClick={() => refresh()}>
+          <Button onClick={() => refresh(undefined, { refresh: true })}>
             <Sparkles size={15} /> Refresh picks
           </Button>
         }
@@ -556,21 +364,52 @@ export function ProgressPage() {
     </div>
   )
 }
-function Metric({ label, value, sub, accent, positive }) {
-  return (
-    <div className="rounded-2xl bg-black/20 p-6 text-center">
-      <p className="text-xs text-slate-600">{label}</p>
-      <p
-        className={`mt-2 text-4xl font-semibold ${accent ? 'text-cyan-300' : positive ? 'text-emerald-300' : ''}`}
-      >
-        {value}
-      </p>
-      <p className="mt-1 text-xs text-slate-600">{sub}</p>
-    </div>
-  )
-}
-
 export function ProfilePage() {
+  const { user: account, updateUser } = useAuth()
+  const { report } = useAnalytics()
+  const [reports, setReports] = useState([])
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    reportApi
+      .list()
+      .then(setReports)
+      .catch(() => setReports([]))
+  }, [])
+
+  async function saveProfile(event) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    setSaving(true)
+    setError('')
+    try {
+      const nextUser = await userApi.updateProfile({
+        name: form.get('name'),
+        targetRating: Number(form.get('targetRating')),
+        preferredPracticeMinutes: Number(form.get('preferredPracticeMinutes')),
+      })
+      updateUser(nextUser)
+      setEditing(false)
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const profile = report?.profile
+  const initials = account?.name
+    ?.split(/\s+/)
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+  const memberSince = account?.createdAt
+    ? new Date(account.createdAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
+    : 'Unknown'
+
   return (
     <div className="space-y-6">
       <SectionHeader
@@ -578,7 +417,7 @@ export function ProfilePage() {
         title="Profile"
         description="Your competitive programming identity and account history."
         action={
-          <Button variant="secondary">
+          <Button variant="secondary" onClick={() => setEditing((value) => !value)}>
             <User size={15} /> Edit profile
           </Button>
         }
@@ -588,21 +427,28 @@ export function ProfilePage() {
         <div className="px-6 pb-6">
           <div className="-mt-10 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div className="flex items-end gap-4">
-              <Avatar className="h-20 w-20 rounded-2xl border-4 border-[#0e131d] text-xl" />
+              <Avatar
+                initials={initials}
+                className="h-20 w-20 rounded-2xl border-4 border-[#0e131d] text-xl"
+              />
               <div className="pb-1">
-                <h2 className="text-xl font-semibold">{user.name}</h2>
-                <p className="text-sm text-slate-500">@{user.handle}</p>
+                <h2 className="text-xl font-semibold">{account?.name}</h2>
+                <p className="text-sm text-slate-500">
+                  @{account?.codeforcesHandle || 'No handle connected'}
+                </p>
               </div>
             </div>
-            <Badge tone="green">● Codeforces connected</Badge>
+            <Badge tone={account?.codeforcesHandle ? 'green' : 'amber'}>
+              {account?.codeforcesHandle ? '● Codeforces connected' : 'Codeforces not connected'}
+            </Badge>
           </div>
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             {[
-              ['Email', user.email],
-              ['Current rating', user.rating],
-              ['Target rating', user.target],
-              ['Practice time', '60 min / day'],
-              ['Member since', 'Jan 2026'],
+              ['Email', account?.email],
+              ['Current rating', profile?.rating ?? 'Unrated'],
+              ['Target rating', account?.targetRating],
+              ['Practice time', `${account?.preferredPracticeMinutes || 60} min / day`],
+              ['Member since', memberSince],
             ].map(([l, v]) => (
               <div key={l} className="rounded-xl bg-black/20 p-4">
                 <p className="text-xs text-slate-600">{l}</p>
@@ -612,11 +458,50 @@ export function ProfilePage() {
           </div>
         </div>
       </Card>
+      {editing && (
+        <Card className="p-6">
+          <SectionHeader title="Edit profile" description="Changes are saved to your account." />
+          <form className="grid gap-5 sm:grid-cols-3" onSubmit={saveProfile}>
+            <SettingField label="Full name" name="name" value={account?.name || ''} />
+            <SettingField
+              label="Target rating"
+              name="targetRating"
+              value={account?.targetRating || 1600}
+              type="number"
+            />
+            <div>
+              <Label>Daily practice time</Label>
+              <Select
+                name="preferredPracticeMinutes"
+                defaultValue={String(account?.preferredPracticeMinutes || 60)}
+                className="w-full"
+              >
+                {[30, 60, 90, 120].map((minutes) => (
+                  <option key={minutes} value={minutes}>
+                    {minutes} minutes
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="flex items-center gap-3 sm:col-span-3">
+              <Button type="submit" disabled={saving}>
+                {saving ? 'Saving...' : 'Save profile'}
+              </Button>
+              {error && <p className="text-sm text-rose-300">{error}</p>}
+            </div>
+          </form>
+        </Card>
+      )}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-6">
           <SectionHeader title="Connected accounts" />
           <div className="space-y-3">
-            <Connected icon={Zap} name="Codeforces" value="raghav_setia" active />
+            <Connected
+              icon={Zap}
+              name="Codeforces"
+              value={account?.codeforcesHandle || 'Not connected'}
+              active={Boolean(account?.codeforcesHandle)}
+            />
             <Connected icon={CodeXml} name="GitHub" value="Not connected" />
           </div>
         </Card>
@@ -624,33 +509,33 @@ export function ProfilePage() {
           <SectionHeader
             title="Recent reports"
             action={
-              <Button size="sm" variant="ghost">
-                View all
-              </Button>
+              <Link to="/progress">
+                <Button size="sm" variant="ghost">
+                  View progress
+                </Button>
+              </Link>
             }
           />
           <div className="space-y-2">
-            {[
-              'Weekly performance · Jun 24',
-              'Full analysis · Jun 17',
-              'Rating gap report · Jun 02',
-            ].map((x, i) => (
-              <div
-                key={x}
+            {reports.slice(0, 3).map((savedReport) => (
+              <Link
+                to={`/report/${savedReport._id || savedReport.id}`}
+                key={savedReport._id || savedReport.id}
                 className="flex items-center justify-between rounded-xl p-3 hover:bg-white/[.03]"
               >
                 <div className="flex items-center gap-3">
                   <FileText size={17} className="text-slate-600" />
                   <div>
-                    <p className="text-sm">{x}</p>
+                    <p className="text-sm">Analysis for {savedReport.handle}</p>
                     <p className="text-xs text-slate-600">
-                      {i === 0 ? '4 days ago' : i === 1 ? '11 days ago' : '26 days ago'}
+                      {new Date(savedReport.generatedAt).toLocaleString()}
                     </p>
                   </div>
                 </div>
                 <ChevronRight size={15} className="text-slate-700" />
-              </div>
+              </Link>
             ))}
+            {!reports.length && <p className="text-sm text-slate-500">No saved reports yet.</p>}
           </div>
         </Card>
       </div>
@@ -669,23 +554,90 @@ function Connected({ icon: Icon, name, value, active }) {
           <p className="text-xs text-slate-600">{value}</p>
         </div>
       </div>
-      <Button variant={active ? 'ghost' : 'secondary'} size="sm">
-        {active ? 'Manage' : 'Connect'}
-      </Button>
+      {active ? (
+        <Link to="/settings">
+          <Button variant="ghost" size="sm">
+            Manage
+          </Button>
+        </Link>
+      ) : (
+        <Button variant="secondary" size="sm" disabled title="Coming in a later milestone">
+          Coming later
+        </Button>
+      )}
     </div>
   )
 }
 
-const settingsTabs = [
-  'Account',
-  'Codeforces',
-  'Appearance',
-  'Notifications',
-  'AI Coach',
-  'Data Refresh',
-]
+const settingsTabs = ['Account', 'Codeforces', 'Notifications', 'AI Coach', 'Data Refresh']
 export function SettingsPage() {
+  const { user: account, updateUser } = useAuth()
   const [tab, setTab] = useState('Account')
+  const [preferences, setPreferences] = useState(account?.preferences || {})
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('')
+
+  useEffect(() => setPreferences(account?.preferences || {}), [account?.preferences])
+
+  async function saveAccount(event) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    setSaving(true)
+    setMessage('')
+    try {
+      const nextUser = await userApi.updateProfile({
+        name: form.get('name'),
+        targetRating: Number(form.get('targetRating')),
+        preferredPracticeMinutes: Number(form.get('preferredPracticeMinutes')),
+      })
+      updateUser(nextUser)
+      setMessage('Account settings saved.')
+    } catch (requestError) {
+      setMessage(getApiErrorMessage(requestError))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function savePreferences() {
+    setSaving(true)
+    setMessage('')
+    try {
+      const nextUser = await userApi.updatePreferences(preferences)
+      updateUser(nextUser)
+      setMessage('Preferences saved.')
+    } catch (requestError) {
+      setMessage(getApiErrorMessage(requestError))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function saveCodeforces(event) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    setSaving(true)
+    setMessage('')
+    try {
+      let nextUser = account
+      const handle = String(form.get('codeforcesHandle')).trim()
+      if (handle !== account.codeforcesHandle) nextUser = await userApi.updateHandle(handle)
+      nextUser = await userApi.updatePreferences({
+        includeGymSubmissions: Boolean(preferences.includeGymSubmissions),
+      })
+      updateUser(nextUser)
+      setMessage('Codeforces settings saved.')
+    } catch (requestError) {
+      setMessage(getApiErrorMessage(requestError))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function togglePreference(key) {
+    setPreferences((current) => ({ ...current, [key]: !current[key] }))
+  }
+
   return (
     <div className="space-y-6">
       <SectionHeader
@@ -716,32 +668,74 @@ export function SettingsPage() {
               }
             />
             {tab === 'Account' ? (
-              <div className="grid gap-5 sm:grid-cols-2">
-                <SettingField label="Full name" value={user.name} />
-                <SettingField label="Email address" value={user.email} />
-                <SettingField label="New password" value="••••••••" type="password" />
-                <SettingField label="Confirm password" value="••••••••" type="password" />
-                <div className="sm:col-span-2">
-                  <Button>Save changes</Button>
+              <form className="grid gap-5 sm:grid-cols-2" onSubmit={saveAccount}>
+                <SettingField label="Full name" name="name" value={account?.name || ''} />
+                <SettingField
+                  label="Email address"
+                  name="email"
+                  value={account?.email || ''}
+                  readOnly
+                />
+                <SettingField
+                  label="Target rating"
+                  name="targetRating"
+                  value={account?.targetRating || 1600}
+                  type="number"
+                />
+                <div>
+                  <Label>Daily practice time</Label>
+                  <Select
+                    className="w-full"
+                    name="preferredPracticeMinutes"
+                    defaultValue={String(account?.preferredPracticeMinutes || 60)}
+                  >
+                    {[30, 60, 90, 120].map((minutes) => (
+                      <option value={minutes} key={minutes}>
+                        {minutes} minutes
+                      </option>
+                    ))}
+                  </Select>
                 </div>
-              </div>
+                <div className="sm:col-span-2">
+                  <Button type="submit" disabled={saving}>
+                    Save changes
+                  </Button>
+                </div>
+              </form>
+            ) : tab === 'Codeforces' ? (
+              <form className="space-y-5" onSubmit={saveCodeforces}>
+                <SettingField
+                  label="Codeforces handle"
+                  name="codeforcesHandle"
+                  value={account?.codeforcesHandle || ''}
+                />
+                <PreferenceToggle
+                  title="Include gym submissions"
+                  description="Use gym contests in performance analysis."
+                  active={Boolean(preferences.includeGymSubmissions)}
+                  onToggle={() => togglePreference('includeGymSubmissions')}
+                />
+                <Button type="submit" disabled={saving}>
+                  Save Codeforces settings
+                </Button>
+              </form>
             ) : (
               <div className="space-y-3">
-                {getSettings(tab).map(([title, desc, active]) => (
-                  <div
-                    key={title}
-                    className="flex items-center justify-between gap-5 rounded-xl border border-white/[.06] p-4"
-                  >
-                    <div>
-                      <p className="text-sm font-medium">{title}</p>
-                      <p className="mt-1 text-xs text-slate-600">{desc}</p>
-                    </div>
-                    <Switch active={active} />
-                  </div>
+                {getSettings(tab).map(([key, title, description]) => (
+                  <PreferenceToggle
+                    key={key}
+                    title={title}
+                    description={description}
+                    active={Boolean(preferences[key])}
+                    onToggle={() => togglePreference(key)}
+                  />
                 ))}
-                <Button className="mt-3">Save preferences</Button>
+                <Button className="mt-3" onClick={savePreferences} disabled={saving}>
+                  Save preferences
+                </Button>
               </div>
             )}
+            {message && <p className="mt-4 text-sm text-slate-400">{message}</p>}
           </Card>
           {tab === 'Account' && (
             <Card className="border-rose-500/20 p-6">
@@ -749,7 +743,12 @@ export function SettingsPage() {
               <p className="mt-2 text-sm text-slate-500">
                 Permanently delete your account and all generated reports.
               </p>
-              <Button variant="danger" className="mt-5">
+              <Button
+                variant="danger"
+                className="mt-5"
+                disabled
+                title="Coming in a later milestone"
+              >
                 <Trash2 size={15} /> Delete account
               </Button>
             </Card>
@@ -759,39 +758,53 @@ export function SettingsPage() {
     </div>
   )
 }
-function SettingField({ label, value, type = 'text' }) {
+function SettingField({ label, value, type = 'text', name, readOnly = false }) {
   return (
     <div>
       <Label>{label}</Label>
-      <Input defaultValue={value} type={type} />
+      <Input defaultValue={value} type={type} name={name} readOnly={readOnly} />
     </div>
   )
 }
 function getSettings(tab) {
   const map = {
-    Codeforces: [
-      ['Automatic handle sync', 'Keep your handle profile up to date.', true],
-      ['Include gym submissions', 'Use gym contests in performance analysis.', false],
-    ],
-    Appearance: [
-      ['Dark theme', 'Use the low-light analytics theme.', true],
-      ['Compact charts', 'Reduce chart height on smaller screens.', false],
-    ],
     Notifications: [
-      ['Weekly report', 'Receive a weekly improvement summary.', true],
-      ['Streak reminders', 'Get notified before a streak expires.', true],
-      ['Contest reminder', 'Remind me about upcoming Codeforces rounds.', false],
+      ['weeklyReport', 'Weekly report', 'Receive a weekly improvement summary.'],
+      ['streakReminders', 'Streak reminders', 'Get notified before a streak expires.'],
+      ['contestReminders', 'Contest reminder', 'Remind me about upcoming Codeforces rounds.'],
     ],
     'AI Coach': [
-      ['Detailed explanations', 'Include reasoning behind each recommendation.', true],
-      ['Aggressive roadmap', 'Prioritize faster rating growth over breadth.', false],
+      [
+        'detailedAIExplanations',
+        'Detailed explanations',
+        'Include reasoning behind each recommendation.',
+      ],
     ],
     'Data Refresh': [
-      ['Refresh after contests', 'Sync automatically when a round ends.', true],
-      ['Daily background refresh', 'Fetch new submissions once a day.', false],
+      [
+        'automaticRefresh',
+        'Automatic refresh',
+        'Refresh analytics when your workspace loads after the cache expires.',
+      ],
     ],
   }
   return map[tab] || []
+}
+
+function PreferenceToggle({ title, description, active, onToggle }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="flex w-full items-center justify-between gap-5 rounded-xl border border-white/[.06] p-4 text-left"
+    >
+      <span>
+        <span className="block text-sm font-medium">{title}</span>
+        <span className="mt-1 block text-xs text-slate-600">{description}</span>
+      </span>
+      <Switch active={active} />
+    </button>
+  )
 }
 
 export function ReportDetailsPage() {
@@ -800,6 +813,7 @@ export function ReportDetailsPage() {
   const [report, setReport] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [exporting, setExporting] = useState(false)
 
   async function loadReport() {
     setLoading(true)
@@ -820,6 +834,28 @@ export function ReportDetailsPage() {
     // Report identity is controlled by the route.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, account?.codeforcesHandle])
+
+  async function exportPdf() {
+    const reportId = report?._id || report?.id || id
+    if (!reportId || reportId === 'latest') return
+    setExporting(true)
+    setError('')
+    try {
+      const blob = await reportApi.exportPdf(reportId)
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `cp-performance-${report.handle}.pdf`
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(url)
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError))
+    } finally {
+      setExporting(false)
+    }
+  }
 
   if (!report) return <DataState loading={loading} error={error} onRetry={loadReport} />
 
@@ -849,8 +885,8 @@ export function ReportDetailsPage() {
             <Button variant="secondary" disabled>
               <Save size={15} /> Saved
             </Button>
-            <Button>
-              <Download size={15} /> Export PDF
+            <Button onClick={exportPdf} disabled={exporting}>
+              <Download size={15} /> {exporting ? 'Exporting...' : 'Export PDF'}
             </Button>
           </div>
         }

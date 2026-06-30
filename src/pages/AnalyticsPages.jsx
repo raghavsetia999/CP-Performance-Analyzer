@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Activity,
@@ -80,36 +80,10 @@ function AnalyticsState({ loading, error, onRetry }) {
 
 export function DashboardPage() {
   const { user: account } = useAuth()
-  const [summary, setSummary] = useState(null)
-  const [state, setState] = useState('loading')
-  const [errorMessage, setErrorMessage] = useState('')
+  const { report, loading, error, refresh } = useAnalytics()
   const handle = account?.codeforcesHandle
 
-  async function loadDashboard() {
-    if (!handle) {
-      setErrorMessage('Add your Codeforces handle in onboarding before loading the dashboard.')
-      setState('error')
-      return
-    }
-
-    setState('loading')
-    setErrorMessage('')
-    try {
-      setSummary(await analyticsApi.getSummary(handle))
-      setState('ready')
-    } catch (requestError) {
-      setErrorMessage(getApiErrorMessage(requestError))
-      setState('error')
-    }
-  }
-
-  useEffect(() => {
-    loadDashboard()
-    // The saved handle is the identity of this dashboard snapshot.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handle])
-
-  if (state === 'loading') {
+  if (!report && loading) {
     return (
       <div className="space-y-6">
         <SectionHeader
@@ -122,7 +96,7 @@ export function DashboardPage() {
     )
   }
 
-  if (state === 'error') {
+  if (!report) {
     return (
       <div className="space-y-6">
         <SectionHeader eyebrow="Dashboard" title="Performance overview" />
@@ -130,8 +104,10 @@ export function DashboardPage() {
           <XCircle className="shrink-0 text-rose-300" />
           <div className="flex-1">
             <h2 className="font-semibold text-rose-200">Could not load live data</h2>
-            <p className="mt-1 text-sm text-slate-500">{errorMessage}</p>
-            <Button className="mt-4" size="sm" onClick={loadDashboard}>
+            <p className="mt-1 text-sm text-slate-500">
+              {error || 'Add your Codeforces handle in onboarding before loading the dashboard.'}
+            </p>
+            <Button className="mt-4" size="sm" onClick={() => refresh()}>
               Retry
             </Button>
           </div>
@@ -140,7 +116,8 @@ export function DashboardPage() {
     )
   }
 
-  const profile = summary.profile
+  const summary = report.summary
+  const profile = report.profile || summary.profile
   const ratingGap = Math.max((account.targetRating || 1600) - (profile.rating || 0), 0)
   const ratingProgress = summary.ratingHistory.slice(-12).map((change) => ({
     month: new Date(change.changedAt).toLocaleDateString(undefined, {
@@ -150,6 +127,7 @@ export function DashboardPage() {
     rating: change.newRating,
   }))
   const topWeakness = summary.topWeaknesses[0]
+  const cachedSnapshot = Boolean(error || report.cache?.cached || report.isSaved)
 
   return (
     <div className="space-y-6">
@@ -157,7 +135,9 @@ export function DashboardPage() {
         <div className="absolute right-0 top-0 h-full w-1/2 bg-gradient-to-l from-cyan-400/[.07] to-transparent" />
         <div className="relative flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
           <div>
-            <Badge tone="green">● Live Codeforces data</Badge>
+            <Badge tone={cachedSnapshot ? 'amber' : 'green'}>
+              {cachedSnapshot ? 'Cached performance snapshot' : '● Live Codeforces data'}
+            </Badge>
             <h2 className="mt-3 text-2xl font-semibold tracking-tight">
               Welcome back, {profile.handle} <span className="text-slate-600">/</span>
             </h2>
@@ -167,7 +147,7 @@ export function DashboardPage() {
                 : `You’re ${ratingGap} points away from your ${account.targetRating || 1600} target.`}
             </p>
           </div>
-          <Button onClick={loadDashboard}>
+          <Button onClick={() => refresh(undefined, { refresh: true })}>
             <RefreshCw size={16} /> Refresh live data
           </Button>
         </div>
@@ -269,6 +249,7 @@ export function DashboardPage() {
 export function AnalyzeHandlePage() {
   const navigate = useNavigate()
   const { user: account } = useAuth()
+  const { setReport: cacheReport } = useAnalytics()
   const [state, setState] = useState('idle')
   const [handle, setHandle] = useState(account?.codeforcesHandle || '')
   const [report, setReport] = useState(null)
@@ -283,7 +264,11 @@ export function AnalyzeHandlePage() {
     setErrorMessage('')
     setState('loading')
     try {
-      setReport(await analyticsApi.analyze(handle.trim()))
+      const nextReport = await analyticsApi.analyze(handle.trim(), { refresh: true })
+      setReport(nextReport)
+      if (handle.trim().toLowerCase() === account?.codeforcesHandle?.toLowerCase()) {
+        cacheReport(nextReport, handle.trim())
+      }
       setState('done')
     } catch (requestError) {
       setErrorMessage(getApiErrorMessage(requestError))

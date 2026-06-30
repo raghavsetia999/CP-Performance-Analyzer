@@ -1,13 +1,21 @@
 import { apiClient } from './apiClient'
 
 export const analyticsApi = {
-  async analyze(handle) {
-    const { data } = await apiClient.post(`/analytics/analyze/${encodeURIComponent(handle)}`)
+  async analyze(handle, { refresh = false } = {}) {
+    const { data } = await apiClient.post(
+      `/analytics/analyze/${encodeURIComponent(handle)}`,
+      {},
+      {
+        params: refresh ? { refresh: true } : undefined,
+      },
+    )
     return data.data
   },
 
-  async getSummary(handle) {
-    const { data } = await apiClient.get(`/analytics/summary/${encodeURIComponent(handle)}`)
+  async getSummary(handle, { refresh = false } = {}) {
+    const { data } = await apiClient.get(`/analytics/summary/${encodeURIComponent(handle)}`, {
+      params: refresh ? { refresh: true } : undefined,
+    })
     return data.data
   },
 

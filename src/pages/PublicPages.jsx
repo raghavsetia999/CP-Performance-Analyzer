@@ -643,7 +643,7 @@ export function OnboardingPage() {
     setError('')
     setSubmitting(true)
     try {
-      await analyticsApi.analyze(handle)
+      await analyticsApi.analyze(handle, { refresh: true })
       await userApi.updateProfile({
         targetRating: Number(form.get('targetRating')),
         preferredPracticeMinutes: Number(form.get('preferredPracticeMinutes')),

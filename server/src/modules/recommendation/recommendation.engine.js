@@ -34,15 +34,87 @@ function pickRatingRange(ratingAnalysis) {
     : { bucket: '800–1000', weakness: 0, rate: 0, weakTags: [] }
 }
 
+const topicTagAliases = {
+  'dynamic programming': 'dp',
+}
+
+function normalizedFocusTopics(focusTopics) {
+  return new Map(
+    focusTopics.map((topic) => [
+      topicTagAliases[topic.topic.toLowerCase()] || topic.topic.toLowerCase(),
+      topic,
+    ]),
+  )
+}
+
+export function rankUnseenProblems({
+  problemCatalog = [],
+  attemptedProblemKeys = [],
+  focusTopics = [],
+  profile = {},
+  limit = 12,
+}) {
+  const attempted = new Set(attemptedProblemKeys)
+  const focus = normalizedFocusTopics(focusTopics)
+  const currentRating = profile.rating || 800
+  const lowerBound = Math.max(800, currentRating - 100)
+  const upperBound = Math.max(1000, currentRating + 300)
+
+  return problemCatalog
+    .filter(
+      (problem) =>
+        problem.url &&
+        problem.rating != null &&
+        !attempted.has(problem.problemKey) &&
+        problem.rating >= lowerBound - 200 &&
+        problem.rating <= upperBound + 200,
+    )
+    .map((problem) => {
+      const matchingTopics = problem.tags
+        .map((tag) => focus.get(tag))
+        .filter(Boolean)
+        .sort((left, right) => right.weakness - left.weakness)
+      const strongestTopic = matchingTopics[0]
+      const targetRating = Math.min(Math.max(problem.rating, lowerBound), upperBound)
+      const ratingDistance = Math.abs(problem.rating - targetRating)
+      const topicScore = strongestTopic ? strongestTopic.weakness * 0.65 : 0
+      const ratingScore = Math.max(0, 30 - ratingDistance / 10)
+      const varietyScore = Math.min(5, problem.tags.length)
+      const score = Math.round(topicScore + ratingScore + varietyScore)
+      const reason = strongestTopic
+        ? `Unseen ${strongestTopic.topic} practice in your ${lowerBound}-${upperBound} improvement range.`
+        : `Unseen practice close to your current ${currentRating || 'starting'} rating.`
+
+      return {
+        id: `${problem.contestId}${problem.index}`,
+        ...problem,
+        source: 'unseen_problemset',
+        priority: score >= 75 ? 'High' : score >= 50 ? 'Medium' : 'Low',
+        matchScore: score,
+        reason,
+      }
+    })
+    .sort(
+      (left, right) =>
+        right.matchScore - left.matchScore ||
+        Math.abs(left.rating - currentRating) - Math.abs(right.rating - currentRating) ||
+        left.problemKey.localeCompare(right.problemKey),
+    )
+    .slice(0, limit)
+}
+
 export function buildRecommendations({
   topicAnalysis,
   ratingAnalysis,
   verdictAnalysis,
   upsolvingAnalysis,
+  problemCatalog = [],
+  attemptedProblemKeys = [],
+  profile = {},
 }) {
   const focusTopics = rankFocusTopics(topicAnalysis)
   const recommendedRatingRange = pickRatingRange(ratingAnalysis)
-  const recommendedProblems = upsolvingAnalysis.slice(0, 8).map((problem) => ({
+  const upsolvingProblems = upsolvingAnalysis.slice(0, 8).map((problem) => ({
     id: problem.contest,
     problemKey: problem.problemKey,
     name: problem.name,
@@ -51,7 +123,15 @@ export function buildRecommendations({
     url: problem.url,
     priority: problem.priorityLevel,
     reason: problem.reason,
+    source: 'upsolving',
   }))
+  const unseenProblems = rankUnseenProblems({
+    problemCatalog,
+    attemptedProblemKeys,
+    focusTopics,
+    profile,
+  })
+  const recommendedProblems = unseenProblems.length ? unseenProblems : upsolvingProblems
 
   const practiceStrategy = []
   if (focusTopics[0]) {
@@ -81,6 +161,8 @@ export function buildRecommendations({
     focusTopics,
     recommendedRatingRange,
     recommendedProblems,
+    unseenProblems,
+    upsolvingProblems,
     upsolvingPriority: upsolvingAnalysis.slice(0, 5),
     practiceStrategy,
   }

@@ -1,4 +1,4 @@
-import { getCodeforcesSnapshot } from '../codeforces/codeforces.service.js'
+import { getCodeforcesProblemset, getCodeforcesSnapshot } from '../codeforces/codeforces.service.js'
 import { buildRecommendations } from '../recommendation/recommendation.engine.js'
 import { ACCEPTED_VERDICT, topicDisplayNames, topicShortNames } from './analytics.constants.js'
 import { groupSubmissionsByProblem } from './problemAnalyzer.js'
@@ -145,12 +145,16 @@ export function createSummary(snapshot, topicAnalysis) {
   }
 }
 
-export async function analyzeHandle(handle) {
-  const snapshot = await getCodeforcesSnapshot(handle)
-  return buildAnalysisFromSnapshot(snapshot)
+export async function analyzeHandle(handle, options = {}) {
+  const problemsetRequest = getCodeforcesProblemset(options).catch(() => [])
+  const [snapshot, problemCatalog] = await Promise.all([
+    getCodeforcesSnapshot(handle, options),
+    problemsetRequest,
+  ])
+  return buildAnalysisFromSnapshot(snapshot, problemCatalog)
 }
 
-export function buildAnalysisFromSnapshot(snapshot) {
+export function buildAnalysisFromSnapshot(snapshot, problemCatalog = []) {
   const topicAnalysis = analyzeTopics(snapshot.submissions)
   const ratingAnalysis = analyzeRatingBands(snapshot.submissions)
   const verdictAnalysis = analyzeVerdicts(snapshot.submissions)
@@ -160,6 +164,9 @@ export function buildAnalysisFromSnapshot(snapshot) {
     ratingAnalysis,
     verdictAnalysis,
     upsolvingAnalysis,
+    problemCatalog,
+    attemptedProblemKeys: snapshot.submissions.map((submission) => submission.problemKey),
+    profile: snapshot.profile,
   })
   const summary = createSummary(snapshot, topicAnalysis)
 
@@ -173,5 +180,6 @@ export function buildAnalysisFromSnapshot(snapshot) {
     recommendations,
     generatedAt: snapshot.fetchedAt,
     metadata: summary.source,
+    cache: { cached: Boolean(snapshot.cached), stale: Boolean(snapshot.stale) },
   }
 }

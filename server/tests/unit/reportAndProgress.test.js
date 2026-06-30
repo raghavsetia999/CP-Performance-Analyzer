@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { buildReportPayload, saveReportForUser } from '../../src/modules/report/report.service.js'
 import { buildProgressHistory } from '../../src/modules/progress/progress.service.js'
 import { buildRecommendations } from '../../src/modules/recommendation/recommendation.engine.js'
+import { PassThrough } from 'node:stream'
+import { createReportPdf } from '../../src/modules/report/report.pdf.js'
 
 function analysisFixture() {
   const recommendations = buildRecommendations({
@@ -50,6 +52,22 @@ describe('report persistence helpers', () => {
     )
     expect(saved.id).toBe('report-1')
     expect(saved.practicePlan.plan).toHaveLength(7)
+  })
+
+  it('renders a valid PDF report stream', async () => {
+    const output = new PassThrough()
+    const chunks = []
+    output.on('data', (chunk) => chunks.push(chunk))
+    const finished = new Promise((resolve, reject) => {
+      output.on('finish', resolve)
+      output.on('error', reject)
+    })
+    createReportPdf(buildReportPayload('user-1', analysisFixture(), { plan: [] }), output)
+    await finished
+    const pdf = Buffer.concat(chunks)
+
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF')
+    expect(pdf.length).toBeGreaterThan(1000)
   })
 })
 

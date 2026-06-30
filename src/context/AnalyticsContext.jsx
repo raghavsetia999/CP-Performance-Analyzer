@@ -1,9 +1,41 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { analyticsApi } from '../services/analyticsApi'
 import { getApiErrorMessage } from '../services/apiClient'
+import { reportApi } from '../services/reportApi'
 import { useAuth } from './AuthContext'
 
 const AnalyticsContext = createContext(null)
+
+function normalizeReport(report) {
+  if (!report) return null
+  return {
+    ...report,
+    profile: report.profile || report.summary?.profile || {},
+    upsolvingAnalysis: report.upsolvingAnalysis || report.upsolvingProblems || [],
+  }
+}
+
+function storageKey(user, handle) {
+  return user?.id && handle ? `cp-pulse:analytics:${user.id}:${handle.toLowerCase()}` : null
+}
+
+function readStoredReport(key) {
+  if (!key) return null
+  try {
+    return normalizeReport(JSON.parse(sessionStorage.getItem(key)))
+  } catch {
+    return null
+  }
+}
+
+function storeReport(key, report) {
+  if (!key || !report) return
+  try {
+    sessionStorage.setItem(key, JSON.stringify(report))
+  } catch {
+    // Analytics still work when browser storage is unavailable or full.
+  }
+}
 
 export function AnalyticsProvider({ children }) {
   const { user } = useAuth()
@@ -11,7 +43,14 @@ export function AnalyticsProvider({ children }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  async function refresh(handle = user?.codeforcesHandle) {
+  function updateReport(nextReport, handle = user?.codeforcesHandle) {
+    const normalized = normalizeReport(nextReport)
+    setReport(normalized)
+    storeReport(storageKey(user, handle), normalized)
+    return normalized
+  }
+
+  async function refresh(handle = user?.codeforcesHandle, options = {}) {
     if (!handle) {
       setReport(null)
       setError('Add a Codeforces handle in onboarding to load analytics.')
@@ -20,29 +59,74 @@ export function AnalyticsProvider({ children }) {
     setLoading(true)
     setError('')
     try {
-      const nextReport = await analyticsApi.analyze(handle)
-      setReport(nextReport)
-      return nextReport
+      const nextReport = await analyticsApi.analyze(handle, options)
+      return updateReport(nextReport, handle)
     } catch (requestError) {
-      setError(getApiErrorMessage(requestError))
-      return null
+      const message = getApiErrorMessage(requestError)
+      setError(report ? `${message} Showing the cached report.` : message)
+      return report
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    if (user?.codeforcesHandle) refresh(user.codeforcesHandle)
-    else {
+    let active = true
+    const handle = user?.codeforcesHandle
+    if (!handle) {
       setReport(null)
       setLoading(false)
+      setError('')
+      return () => {
+        active = false
+      }
     }
-    // Refresh when the authenticated Codeforces identity changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.codeforcesHandle])
+
+    const key = storageKey(user, handle)
+    const stored = readStoredReport(key)
+    setReport(stored)
+    setLoading(!stored)
+    setError('')
+
+    async function hydrate() {
+      let fallback = stored
+      if (!fallback) {
+        try {
+          fallback = normalizeReport(await reportApi.latest(handle))
+          if (active) {
+            setReport(fallback)
+            storeReport(key, fallback)
+          }
+        } catch {
+          // A saved report is optional; continue to the live cache/API path.
+        }
+      }
+
+      try {
+        const live = normalizeReport(await analyticsApi.analyze(handle))
+        if (active) {
+          setReport(live)
+          storeReport(key, live)
+          setError('')
+        }
+      } catch (requestError) {
+        if (active) {
+          const message = getApiErrorMessage(requestError)
+          setError(fallback ? `${message} Showing the cached report.` : message)
+        }
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+
+    hydrate()
+    return () => {
+      active = false
+    }
+  }, [user?.id, user?.codeforcesHandle])
 
   const value = useMemo(
-    () => ({ report, loading, error, refresh, setReport }),
+    () => ({ report, loading, error, refresh, setReport: updateReport }),
     [report, loading, error],
   )
 

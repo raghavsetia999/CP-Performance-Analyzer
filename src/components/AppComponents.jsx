@@ -328,10 +328,12 @@ export function ProblemTable({ problems, action = 'Upsolve' }) {
                 <PriorityBadge>{p.priority || 'Medium'}</PriorityBadge>
               </td>
               <td className="px-4">
-                <Button size="sm" variant="secondary">
-                  {action}
-                  <ExternalLink size={13} />
-                </Button>
+                <a href={p.url || undefined} target="_blank" rel="noreferrer">
+                  <Button size="sm" variant="secondary" disabled={!p.url}>
+                    {action}
+                    <ExternalLink size={13} />
+                  </Button>
+                </a>
               </td>
             </tr>
           ))}

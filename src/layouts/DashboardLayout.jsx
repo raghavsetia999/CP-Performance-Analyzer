@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   Activity,
+  AlertTriangle,
   BarChart3,
   Bell,
   Bot,
@@ -24,6 +25,7 @@ import {
 } from 'lucide-react'
 import { Avatar, Button, Input } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
+import { useAnalytics } from '../context/AnalyticsContext'
 import { cn } from '../lib/utils'
 
 const groups = [
@@ -199,6 +201,7 @@ function Topbar({ setOpen, collapsed, user, onLogout }) {
 }
 export default function DashboardLayout() {
   const { user, logout } = useAuth()
+  const { report, error } = useAnalytics()
   const [open, setOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   return (
@@ -212,6 +215,12 @@ export default function DashboardLayout() {
         )}
       >
         <div className="mx-auto max-w-[1600px] p-4 sm:p-6 lg:p-8">
+          {report && error && (
+            <div className="mb-5 flex gap-3 rounded-xl border border-amber-400/20 bg-amber-400/[.06] p-4 text-sm text-amber-100">
+              <AlertTriangle size={18} className="shrink-0 text-amber-300" />
+              <span>{error}</span>
+            </div>
+          )}
           <Outlet />
         </div>
       </main>

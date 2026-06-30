@@ -14,6 +14,16 @@ const envSchema = z
     BCRYPT_ROUNDS: z.coerce.number().int().min(4).max(15).default(10),
     CODEFORCES_API_BASE_URL: z.string().url().default('https://codeforces.com/api'),
     CODEFORCES_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
+    CODEFORCES_CACHE_TTL_MS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(5 * 60 * 1000),
+    CODEFORCES_PROBLEMSET_CACHE_TTL_MS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(6 * 60 * 60 * 1000),
     AI_PROVIDER: z.enum(['gemini', 'openai']).default('gemini'),
     GEMINI_API_KEY: z.string().optional(),
     OPENAI_API_KEY: z.string().optional(),

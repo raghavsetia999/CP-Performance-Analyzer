@@ -2,18 +2,23 @@ import { successResponse } from '../../utils/ApiResponse.js'
 import { analyzeHandle } from './analytics.service.js'
 
 export async function analyze(request, response) {
-  const report = await analyzeHandle(request.params.handle)
+  const report = await analyzeHandle(request.params.handle, {
+    forceRefresh: request.query.refresh === 'true',
+  })
   response.json(
     successResponse(report, {
       generatedAt: report.summary.source.fetchedAt,
-      cached: false,
+      cached: report.cache.cached,
+      stale: report.cache.stale,
       source: 'codeforces',
     }),
   )
 }
 
 export async function summary(request, response) {
-  const report = await analyzeHandle(request.params.handle)
+  const report = await analyzeHandle(request.params.handle, {
+    forceRefresh: request.query.refresh === 'true',
+  })
   response.json(successResponse(report.summary))
 }
 

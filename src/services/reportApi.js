@@ -25,4 +25,11 @@ export const reportApi = {
     const { data } = await apiClient.delete(`/reports/${encodeURIComponent(id)}`)
     return data.data
   },
+
+  async exportPdf(id) {
+    const response = await apiClient.get(`/reports/${encodeURIComponent(id)}/export`, {
+      responseType: 'blob',
+    })
+    return response.data
+  },
 }

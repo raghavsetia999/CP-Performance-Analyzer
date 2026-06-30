@@ -14,7 +14,12 @@ and focused practice guidance.
 - Explainable topic weakness engine with unit tests
 - Rating-band, verdict-pattern, and upsolving analyzers
 - Rule-based recommendations and seven-day coaching plan (`aiEnabled: false`)
+- Unseen-problem recommendations ranked from the cached Codeforces problem catalogue
 - Saved report APIs and multi-report progress history
+- Authenticated PDF export for saved reports
+- Backend-connected profile, handle, practice, and notification preferences
+- Coalesced Codeforces requests with snapshot, problemset, and stale-cache handling
+- Shared frontend analytics snapshots with session and latest-saved-report fallback
 - Live weakness, rating, verdict, upsolving, recommendation, coach, plan, progress, and report pages
 
 External Gemini/OpenAI integration is intentionally disabled. The current coach is deterministic,
@@ -51,8 +56,8 @@ cd server
 npm test
 ```
 
-The backend currently has 17 tests covering API validation, Codeforces mapping, analytics,
-recommendations, report payloads, progress history, and the rule-based coach.
+The backend currently has 21 tests covering API validation, Codeforces mapping and caching,
+analytics, unseen recommendations, report/PDF payloads, progress history, and the rule-based coach.
 
 See [the frontend-aligned implementation report](docs/CP-Performance-Analyzer-Aligned-Report.md)
 for the architecture, data contracts, two-week roadmap, testing plan, and deployment checklist.
