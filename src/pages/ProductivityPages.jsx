@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import toast from 'react-hot-toast'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
   Activity,
   CheckCircle2,
@@ -10,7 +11,6 @@ import {
   ExternalLink,
   FileText,
   RefreshCw,
-  Save,
   Sparkles,
   Target,
   Trash2,
@@ -59,7 +59,16 @@ function DataState({ loading, error, onRetry }) {
     <Card className="border-rose-400/20 bg-rose-400/[.04] p-6">
       <p className="text-sm text-rose-200">{error || 'No data is available yet.'}</p>
       {onRetry && (
-        <Button className="mt-4" size="sm" onClick={() => onRetry()}>
+        <Button
+          className="mt-4"
+          size="sm"
+          onClick={async () => {
+            const toastId = toast.loading('Retrying...')
+            const result = await onRetry()
+            if (result) toast.success('Data loaded', { id: toastId })
+            else toast.error('Data is still unavailable', { id: toastId })
+          }}
+        >
           Retry
         </Button>
       )}
@@ -118,7 +127,14 @@ export function UpsolvingPage() {
         title="Upsolving queue"
         description="Unsolved contest attempts ranked by learning value and urgency."
         action={
-          <Button onClick={() => refresh(undefined, { refresh: true })}>
+          <Button
+            onClick={async () => {
+              const toastId = toast.loading('Refreshing upsolving queue...')
+              const result = await refresh(undefined, { refresh: true })
+              if (result) toast.success('Upsolving queue refreshed', { id: toastId })
+              else toast.error('Could not refresh the queue', { id: toastId })
+            }}
+          >
             <RefreshCw size={15} /> Refresh queue
           </Button>
         }
@@ -194,7 +210,14 @@ export function RecommendationsPage() {
         title="Problem recommendations"
         description="No random ladders. Every recommendation has a reason."
         action={
-          <Button onClick={() => refresh(undefined, { refresh: true })}>
+          <Button
+            onClick={async () => {
+              const toastId = toast.loading('Refreshing recommendations...')
+              const result = await refresh(undefined, { refresh: true })
+              if (result) toast.success('Recommendations refreshed', { id: toastId })
+              else toast.error('Could not refresh recommendations', { id: toastId })
+            }}
+          >
             <Sparkles size={15} /> Refresh picks
           </Button>
         }
@@ -264,9 +287,13 @@ export function ProgressPage() {
     setLoading(true)
     setError('')
     try {
-      setProgress(await progressApi.get(account.codeforcesHandle))
+      const nextProgress = await progressApi.get(account.codeforcesHandle)
+      setProgress(nextProgress)
+      return nextProgress
     } catch (requestError) {
-      setError(getApiErrorMessage(requestError))
+      const message = getApiErrorMessage(requestError)
+      setError(message)
+      return null
     } finally {
       setLoading(false)
     }
@@ -392,8 +419,11 @@ export function ProfilePage() {
       })
       updateUser(nextUser)
       setEditing(false)
+      toast.success('Profile updated successfully')
     } catch (requestError) {
-      setError(getApiErrorMessage(requestError))
+      const message = getApiErrorMessage(requestError)
+      setError(message)
+      toast.error(message)
     } finally {
       setSaving(false)
     }
@@ -561,7 +591,13 @@ function Connected({ icon: Icon, name, value, active }) {
           </Button>
         </Link>
       ) : (
-        <Button variant="secondary" size="sm" disabled title="Coming in a later milestone">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() =>
+            toast('GitHub connection is planned for a later milestone.', { icon: 'ℹ️' })
+          }
+        >
           Coming later
         </Button>
       )}
@@ -572,12 +608,22 @@ function Connected({ icon: Icon, name, value, active }) {
 const settingsTabs = ['Account', 'Codeforces', 'Notifications', 'AI Coach', 'Data Refresh']
 export function SettingsPage() {
   const { user: account, updateUser } = useAuth()
-  const [tab, setTab] = useState('Account')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedTab = searchParams.get('tab')
+  const [tab, setTab] = useState(settingsTabs.includes(requestedTab) ? requestedTab : 'Account')
   const [preferences, setPreferences] = useState(account?.preferences || {})
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
 
   useEffect(() => setPreferences(account?.preferences || {}), [account?.preferences])
+  useEffect(() => {
+    if (settingsTabs.includes(requestedTab)) setTab(requestedTab)
+  }, [requestedTab])
+
+  function selectTab(nextTab) {
+    setTab(nextTab)
+    setSearchParams({ tab: nextTab })
+  }
 
   async function saveAccount(event) {
     event.preventDefault()
@@ -592,8 +638,11 @@ export function SettingsPage() {
       })
       updateUser(nextUser)
       setMessage('Account settings saved.')
+      toast.success('Account settings saved')
     } catch (requestError) {
-      setMessage(getApiErrorMessage(requestError))
+      const errorMessage = getApiErrorMessage(requestError)
+      setMessage(errorMessage)
+      toast.error(errorMessage)
     } finally {
       setSaving(false)
     }
@@ -606,8 +655,11 @@ export function SettingsPage() {
       const nextUser = await userApi.updatePreferences(preferences)
       updateUser(nextUser)
       setMessage('Preferences saved.')
+      toast.success('Preferences saved')
     } catch (requestError) {
-      setMessage(getApiErrorMessage(requestError))
+      const errorMessage = getApiErrorMessage(requestError)
+      setMessage(errorMessage)
+      toast.error(errorMessage)
     } finally {
       setSaving(false)
     }
@@ -627,8 +679,11 @@ export function SettingsPage() {
       })
       updateUser(nextUser)
       setMessage('Codeforces settings saved.')
+      toast.success('Codeforces settings saved')
     } catch (requestError) {
-      setMessage(getApiErrorMessage(requestError))
+      const errorMessage = getApiErrorMessage(requestError)
+      setMessage(errorMessage)
+      toast.error(errorMessage)
     } finally {
       setSaving(false)
     }
@@ -650,7 +705,7 @@ export function SettingsPage() {
           {settingsTabs.map((x) => (
             <button
               key={x}
-              onClick={() => setTab(x)}
+              onClick={() => selectTab(x)}
               className={`w-full rounded-xl px-4 py-3 text-left text-sm transition ${tab === x ? 'bg-cyan-400/10 text-cyan-300' : 'text-slate-500 hover:bg-white/[.035]'}`}
             >
               {x}
@@ -746,8 +801,11 @@ export function SettingsPage() {
               <Button
                 variant="danger"
                 className="mt-5"
-                disabled
-                title="Coming in a later milestone"
+                onClick={() =>
+                  toast('Account deletion is not enabled until the recovery flow is implemented.', {
+                    icon: 'ℹ️',
+                  })
+                }
               >
                 <Trash2 size={15} /> Delete account
               </Button>
@@ -822,8 +880,11 @@ export function ReportDetailsPage() {
       const nextReport =
         id === 'latest' ? await reportApi.latest(account.codeforcesHandle) : await reportApi.get(id)
       setReport(nextReport)
+      return nextReport
     } catch (requestError) {
-      setError(getApiErrorMessage(requestError))
+      const message = getApiErrorMessage(requestError)
+      setError(message)
+      return null
     } finally {
       setLoading(false)
     }
@@ -840,6 +901,7 @@ export function ReportDetailsPage() {
     if (!reportId || reportId === 'latest') return
     setExporting(true)
     setError('')
+    const toastId = toast.loading('Preparing PDF report...')
     try {
       const blob = await reportApi.exportPdf(reportId)
       const url = URL.createObjectURL(blob)
@@ -850,8 +912,11 @@ export function ReportDetailsPage() {
       anchor.click()
       anchor.remove()
       URL.revokeObjectURL(url)
+      toast.success('PDF report downloaded', { id: toastId })
     } catch (requestError) {
-      setError(getApiErrorMessage(requestError))
+      const message = getApiErrorMessage(requestError)
+      setError(message)
+      toast.error(message, { id: toastId })
     } finally {
       setExporting(false)
     }
@@ -882,9 +947,7 @@ export function ReportDetailsPage() {
         description={`A saved snapshot of ${report.handle} based on ${report.summary.totalSubmissions} submissions.`}
         action={
           <div className="flex gap-2">
-            <Button variant="secondary" disabled>
-              <Save size={15} /> Saved
-            </Button>
+            <Badge tone="green">Saved report</Badge>
             <Button onClick={exportPdf} disabled={exporting}>
               <Download size={15} /> {exporting ? 'Exporting...' : 'Export PDF'}
             </Button>

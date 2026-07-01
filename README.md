@@ -13,17 +13,19 @@ and focused practice guidance.
 - Stable submission normalization and unique-problem grouping
 - Explainable topic weakness engine with unit tests
 - Rating-band, verdict-pattern, and upsolving analyzers
-- Rule-based recommendations and seven-day coaching plan (`aiEnabled: false`)
+- Gemini-grounded coaching with validated structured output and a deterministic rule-based fallback
 - Unseen-problem recommendations ranked from the cached Codeforces problem catalogue
 - Saved report APIs and multi-report progress history
 - Authenticated PDF export for saved reports
 - Backend-connected profile, handle, practice, and notification preferences
 - Coalesced Codeforces requests with snapshot, problemset, and stale-cache handling
 - Shared frontend analytics snapshots with session and latest-saved-report fallback
+- Functional dashboard controls and global hot-toast feedback for user actions
 - Live weakness, rating, verdict, upsolving, recommendation, coach, plan, progress, and report pages
 
-External Gemini/OpenAI integration is intentionally disabled. The current coach is deterministic,
-explainable, and generated only from verified analytics.
+Gemini is optional and runs only through the authenticated backend. Its responses are grounded in a
+compact verified analytics snapshot, schema-validated, rate-limited, and replaced by the
+deterministic coach whenever the provider is missing, blocked, unavailable, or returns invalid data.
 
 ## Local setup
 
@@ -56,8 +58,9 @@ cd server
 npm test
 ```
 
-The backend currently has 21 tests covering API validation, Codeforces mapping and caching,
-analytics, unseen recommendations, report/PDF payloads, progress history, and the rule-based coach.
+The backend currently has 28 tests covering API validation, Codeforces mapping and caching,
+analytics, unseen recommendations, report/PDF payloads, progress history, the rule-based coach, and
+the guarded Gemini provider.
 
 See [the frontend-aligned implementation report](docs/CP-Performance-Analyzer-Aligned-Report.md)
 for the architecture, data contracts, two-week roadmap, testing plan, and deployment checklist.

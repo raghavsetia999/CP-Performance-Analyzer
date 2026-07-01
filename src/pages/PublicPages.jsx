@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import toast from 'react-hot-toast'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Activity,
@@ -404,9 +405,12 @@ export function LoginPage() {
     setSubmitting(true)
     try {
       await login({ email: form.get('email'), password: form.get('password') })
+      toast.success('Welcome back! Live analytics are loading.')
       navigate('/dashboard', { replace: true })
     } catch (requestError) {
-      setError(getApiErrorMessage(requestError))
+      const message = getApiErrorMessage(requestError)
+      setError(message)
+      toast.error(message)
     } finally {
       setSubmitting(false)
     }
@@ -456,7 +460,12 @@ export function LoginPage() {
           {submitting ? 'Logging in…' : 'Log in'} <ArrowRight size={16} />
         </Button>
         <Divider />
-        <Button type="button" variant="secondary" className="w-full" disabled title="Coming later">
+        <Button
+          type="button"
+          variant="secondary"
+          className="w-full"
+          onClick={() => toast('Google sign-in is not configured yet.', { icon: 'ℹ️' })}
+        >
           <span className="font-bold text-white">G</span> Continue with Google
         </Button>
       </form>
@@ -496,9 +505,12 @@ export function RegisterPage() {
         codeforcesHandle: form.get('codeforcesHandle'),
         targetRating: Number(form.get('targetRating')),
       })
+      toast.success('Account created successfully')
       navigate('/onboarding', { replace: true })
     } catch (requestError) {
-      setError(getApiErrorMessage(requestError))
+      const message = getApiErrorMessage(requestError)
+      setError(message)
+      toast.error(message)
     } finally {
       setSubmitting(false)
     }
@@ -571,7 +583,12 @@ export function RegisterPage() {
           {submitting ? 'Creating account…' : 'Create free account'} <ArrowRight size={16} />
         </Button>
         <Divider />
-        <Button type="button" variant="secondary" className="w-full" disabled title="Coming later">
+        <Button
+          type="button"
+          variant="secondary"
+          className="w-full"
+          onClick={() => toast('Google sign-up is not configured yet.', { icon: 'ℹ️' })}
+        >
           <b>G</b> Continue with Google
         </Button>
       </form>
@@ -595,16 +612,18 @@ export function ForgotPasswordPage() {
         <Field label="Email address" icon={Mail} type="email" placeholder="you@example.com" />
         <Button
           className="w-full"
-          disabled
-          title="Password reset is planned after the MVP auth flow"
+          type="button"
+          onClick={() =>
+            toast('Password reset email delivery is not configured yet.', { icon: 'ℹ️' })
+          }
         >
           Password reset coming next <ArrowRight size={16} />
         </Button>
         <div className="flex gap-3 rounded-xl border border-white/[.06] bg-white/[.025] p-4">
           <ShieldCheck size={18} className="shrink-0 text-emerald-400" />
           <p className="text-xs leading-5 text-slate-500">
-            Password reset email delivery is intentionally disabled until its secure token flow is
-            implemented.
+            Password reset email delivery is not configured yet. The button above explains the
+            current limitation without showing a false success state.
           </p>
         </div>
       </form>
@@ -651,9 +670,12 @@ export function OnboardingPage() {
       })
       const nextUser = await userApi.updateHandle(handle)
       updateUser(nextUser)
+      toast.success('Profile connected. Your analytics are ready.')
       navigate('/dashboard', { replace: true })
     } catch (requestError) {
-      setError(getApiErrorMessage(requestError))
+      const message = getApiErrorMessage(requestError)
+      setError(message)
+      toast.error(message)
     } finally {
       setSubmitting(false)
     }

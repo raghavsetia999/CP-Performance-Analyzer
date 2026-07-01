@@ -26,8 +26,18 @@ const envSchema = z
       .default(6 * 60 * 60 * 1000),
     AI_PROVIDER: z.enum(['gemini', 'openai']).default('gemini'),
     GEMINI_API_KEY: z.string().optional(),
+    GEMINI_API_BASE_URL: z.string().url().default('https://generativelanguage.googleapis.com'),
     OPENAI_API_KEY: z.string().optional(),
     AI_MODEL: z.string().optional(),
+    AI_FALLBACK_MODEL: z.string().optional(),
+    AI_TIMEOUT_MS: z.coerce.number().int().min(1000).max(30000).default(15000),
+    AI_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(256).max(4096).default(2048),
+    AI_RATE_LIMIT_WINDOW_MS: z.coerce
+      .number()
+      .int()
+      .min(60 * 1000)
+      .default(15 * 60 * 1000),
+    AI_RATE_LIMIT_MAX: z.coerce.number().int().min(1).max(100).default(20),
   })
   .superRefine((values, context) => {
     if (values.NODE_ENV === 'production' && values.JWT_SECRET === developmentSecret) {

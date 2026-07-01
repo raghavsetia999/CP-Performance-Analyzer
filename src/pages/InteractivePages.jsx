@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import toast from 'react-hot-toast'
 import { Bot, CalendarDays, Check, ChevronRight, RefreshCw, Send, Sparkles } from 'lucide-react'
 import {
   AIResponseCard,
@@ -19,6 +20,73 @@ const prompts = [
   'How should I improve contest performance?',
 ]
 
+function CoachMessage({ item }) {
+  const paragraphs = item.answer
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+  const responseEngine =
+    item.source === 'gemini'
+      ? `Gemini${item.model ? ` · ${item.model}` : ''}`
+      : 'Rule-based fallback'
+
+  return (
+    <div className="max-w-xl rounded-2xl rounded-tl-sm border border-white/[.05] bg-white/[.045] p-5 text-sm text-slate-300">
+      <div className="space-y-3 leading-7">
+        {paragraphs.map((paragraph, index) => (
+          <p key={`${paragraph.slice(0, 30)}-${index}`} className="whitespace-pre-line">
+            {paragraph}
+          </p>
+        ))}
+      </div>
+      {item.evidence?.length > 0 && (
+        <div className="mt-5">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-300">
+            Evidence from your data
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {item.evidence.map((fact, index) => (
+              <div
+                key={`${fact.label}-${index}`}
+                className="rounded-xl border border-white/[.05] bg-black/15 p-3"
+              >
+                <p className="text-[10px] text-slate-600">{fact.label}</p>
+                <p className="mt-1 text-xs font-medium text-slate-300">{fact.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {item.suggestedActions?.length > 0 && (
+        <div className="mt-5 rounded-xl bg-cyan-400/[.05] p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300">
+            Recommended next steps
+          </p>
+          <ul className="mt-3 space-y-2">
+            {item.suggestedActions.map((action, index) => (
+              <li key={`${action}-${index}`} className="flex gap-2 leading-6 text-slate-400">
+                <span className="font-mono text-cyan-400">{index + 1}.</span>
+                <span>{action}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {item.fallbackReason && (
+        <div className="mt-4 rounded-xl border border-amber-400/15 bg-amber-400/[.05] px-3 py-2 text-[11px] leading-5 text-amber-200/80">
+          {item.fallbackReason === 'gemini_rate_limited'
+            ? 'Gemini quota is temporarily exhausted. This answer was produced from the same verified analytics by the deterministic fallback.'
+            : 'Gemini was temporarily unavailable. This answer was produced from the same verified analytics by the deterministic fallback.'}
+        </div>
+      )}
+      <div className="mt-5 flex flex-wrap gap-x-4 gap-y-1 border-t border-white/[.06] pt-3 text-[10px] text-slate-600">
+        <span>Primary data: Codeforces API analytics</span>
+        <span>Response engine: {responseEngine}</span>
+      </div>
+    </div>
+  )
+}
+
 export function AICoachPage() {
   const { user: account } = useAuth()
   const { report } = useAnalytics()
@@ -26,6 +94,7 @@ export function AICoachPage() {
   const [chat, setChat] = useState([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [coachSource, setCoachSource] = useState(null)
   async function send(value = message) {
     const question = value.trim()
     if (!question || !account?.codeforcesHandle) return
@@ -33,10 +102,26 @@ export function AICoachPage() {
     setError('')
     try {
       const response = await aiApi.chat(account.codeforcesHandle, question)
-      setChat((items) => [...items, { question, answer: response.answer }])
+      setChat((items) => [
+        ...items,
+        {
+          question,
+          answer: response.answer,
+          suggestedActions: response.suggestedActions || [],
+          evidence: response.evidence || [],
+          intent: response.intent,
+          fallbackReason: response.fallbackReason,
+          source: response.source,
+          model: response.model,
+        },
+      ])
+      setCoachSource(response.source)
       setMessage('')
+      toast.success('Coach response ready')
     } catch (requestError) {
-      setError(getApiErrorMessage(requestError))
+      const message = getApiErrorMessage(requestError)
+      setError(message)
+      toast.error(message)
     } finally {
       setSubmitting(false)
     }
@@ -47,7 +132,11 @@ export function AICoachPage() {
         eyebrow="Your personal CP strategist"
         title="AI performance coach"
         description="Grounded in your submission history—not generic advice."
-        action={<Badge tone="green">Rule-based · AI disabled</Badge>}
+        action={
+          <Badge tone="green">
+            {coachSource === 'rule_based' ? 'Rule-based fallback' : 'Gemini · fallback protected'}
+          </Badge>
+        }
       />
       <div className="grid gap-4 xl:grid-cols-[320px_1fr]">
         <div className="space-y-4">
@@ -90,6 +179,7 @@ export function AICoachPage() {
                 <button
                   key={prompt}
                   onClick={() => send(prompt)}
+                  disabled={submitting}
                   className="w-full rounded-xl border border-white/[.06] p-3 text-left text-xs leading-5 text-slate-400 transition hover:border-cyan-400/20 hover:text-white"
                 >
                   {prompt}
@@ -106,7 +196,10 @@ export function AICoachPage() {
             </div>
             <div>
               <p className="font-semibold">CP Pulse Coach</p>
-              <p className="text-xs text-emerald-400">● Deterministic coach ready</p>
+              <p className="text-xs text-emerald-400">
+                ●{' '}
+                {coachSource === 'rule_based' ? 'Rule-based fallback active' : 'Gemini coach ready'}
+              </p>
             </div>
           </div>
           <div className="flex-1 space-y-5 overflow-y-auto p-5 sm:p-7">
@@ -115,8 +208,9 @@ export function AICoachPage() {
                 <Sparkles size={16} />
               </div>
               <div className="rounded-2xl rounded-tl-sm bg-white/[.045] p-4 text-sm leading-6 text-slate-300">
-                I’m using your verified analytics and deterministic rules. No external AI provider
-                is enabled in this phase.
+                Codeforces profile, submission, rating, verdict, and topic analytics are the primary
+                source. Gemini turns those verified facts into a readable explanation; the
+                deterministic coach takes over if Gemini is unavailable.
               </div>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
@@ -133,9 +227,7 @@ export function AICoachPage() {
                 <div className="ml-auto max-w-xl rounded-2xl rounded-tr-sm bg-cyan-400 p-4 text-sm text-slate-950">
                   {item.question}
                 </div>
-                <div className="max-w-xl rounded-2xl rounded-tl-sm bg-white/[.045] p-4 text-sm leading-6 text-slate-300">
-                  {item.answer}
-                </div>
+                <CoachMessage item={item} />
               </div>
             ))}
             {error && <p className="text-sm text-rose-300">{error}</p>}
@@ -162,7 +254,7 @@ export function AICoachPage() {
               </Button>
             </div>
             <p className="mt-2 text-center text-[10px] text-slate-700">
-              Rule-based response · external AI is disabled.
+              Analytics-grounded response · Gemini with rule-based fallback.
             </p>
           </form>
         </Card>
@@ -176,6 +268,7 @@ export function PracticePlanPage() {
   const [tasks, setTasks] = useState([])
   const [view, setView] = useState('cards')
   const [overview, setOverview] = useState('')
+  const [planSource, setPlanSource] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const completed = tasks.filter((item) => item.done).length
@@ -188,11 +281,15 @@ export function PracticePlanPage() {
     setTasks((items) =>
       items.map((item) => (item.day === day ? { ...item, done: !item.done } : item)),
     )
+    const task = tasks.find((item) => item.day === day)
+    if (task)
+      toast.success(task.done ? `${task.label} marked incomplete` : `${task.label} completed`)
   }
-  async function regenerate() {
+  async function regenerate(notify = false) {
     if (!account?.codeforcesHandle) return
     setLoading(true)
     setError('')
+    const toastId = notify ? toast.loading('Regenerating practice plan...') : null
     try {
       const response = await aiApi.practicePlan(
         account.codeforcesHandle,
@@ -200,8 +297,12 @@ export function PracticePlanPage() {
       )
       setTasks(response.plan)
       setOverview(response.overview)
+      setPlanSource(response.source)
+      if (toastId) toast.success('Practice plan regenerated', { id: toastId })
     } catch (requestError) {
-      setError(getApiErrorMessage(requestError))
+      const message = getApiErrorMessage(requestError)
+      setError(message)
+      if (toastId) toast.error(message, { id: toastId })
     } finally {
       setLoading(false)
     }
@@ -215,22 +316,25 @@ export function PracticePlanPage() {
 
   if (loading && !tasks.length) {
     return (
-      <Card className="p-8 text-center text-sm text-slate-500">Generating rule-based plan…</Card>
+      <Card className="p-8 text-center text-sm text-slate-500">Generating your practice plan…</Card>
     )
   }
   return (
     <div className="space-y-6">
       <SectionHeader
-        eyebrow="Rule-based weekly plan"
+        eyebrow={planSource === 'rule_based' ? 'Rule-based fallback plan' : 'Gemini weekly plan'}
         title="Your 7-day practice plan"
         description="One focused hour per day, shaped around your highest-leverage gaps."
         action={
           <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={regenerate}>
+            <Button variant="secondary" onClick={() => regenerate(true)}>
               <RefreshCw size={15} /> Regenerate
             </Button>
             <Button
-              onClick={() => setTasks((items) => items.map((item) => ({ ...item, done: true })))}
+              onClick={() => {
+                setTasks((items) => items.map((item) => ({ ...item, done: true })))
+                toast.success('Week marked complete')
+              }}
             >
               <Check size={15} /> Mark week complete
             </Button>
@@ -308,7 +412,7 @@ export function PracticePlanPage() {
         ))}
       </div>
       <InsightBanner>
-        {overview || 'The plan is generated from your current analytics without external AI.'}
+        {overview || 'The plan is generated from your current verified analytics.'}
       </InsightBanner>
     </div>
   )

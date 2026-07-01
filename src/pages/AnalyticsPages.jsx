@@ -1,32 +1,27 @@
-import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useEffect, useState } from 'react'
+import toast from 'react-hot-toast'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  Activity,
   AlertTriangle,
   ArrowRight,
-  Award,
   BarChart3,
   CheckCircle2,
   Clock3,
   Code2,
-  Flame,
   Info,
   RefreshCw,
   Search,
   Target,
   Trophy,
-  Users,
   XCircle,
 } from 'lucide-react'
 import { Badge, Button, Card, Input, Progress, Select } from '../components/ui'
 import {
-  AIResponseCard,
   BarChartView,
   ChartCard,
   DonutChart,
   InsightBanner,
   LoadingState,
-  ProblemTable,
   RatingBadge,
   SectionHeader,
   StatCard,
@@ -34,7 +29,6 @@ import {
   VerdictBadge,
   WeaknessCard,
 } from '../components/AppComponents'
-import { problems, progressData, ratingData, topicData, verdictData } from '../data/mockData'
 import { useAuth } from '../context/AuthContext'
 import { useAnalytics } from '../context/AnalyticsContext'
 import { analyticsApi } from '../services/analyticsApi'
@@ -64,13 +58,19 @@ function formatRelativeTime(value) {
 
 function AnalyticsState({ loading, error, onRetry }) {
   if (loading) return <LoadingState />
+  async function retry() {
+    const toastId = toast.loading('Retrying analytics...')
+    const result = await onRetry()
+    if (result) toast.success('Analytics loaded', { id: toastId })
+    else toast.error('Analytics are still unavailable', { id: toastId })
+  }
   return (
     <Card className="flex gap-4 border-rose-400/20 bg-rose-400/[.04] p-5">
       <XCircle className="shrink-0 text-rose-300" />
       <div>
         <h2 className="font-semibold text-rose-200">Live analytics unavailable</h2>
         <p className="mt-1 text-sm text-slate-500">{error || 'No analysis is loaded yet.'}</p>
-        <Button className="mt-4" size="sm" onClick={() => onRetry()}>
+        <Button className="mt-4" size="sm" onClick={retry}>
           Retry
         </Button>
       </div>
@@ -82,6 +82,16 @@ export function DashboardPage() {
   const { user: account } = useAuth()
   const { report, loading, error, refresh } = useAnalytics()
   const handle = account?.codeforcesHandle
+
+  async function refreshDashboard(force = false) {
+    const toastId = toast.loading(
+      force ? 'Refreshing live Codeforces data...' : 'Loading analytics...',
+    )
+    const result = await refresh(undefined, { refresh: force })
+    if (result)
+      toast.success(force ? 'Live analytics refreshed' : 'Analytics loaded', { id: toastId })
+    else toast.error('Could not refresh analytics', { id: toastId })
+  }
 
   if (!report && loading) {
     return (
@@ -107,7 +117,7 @@ export function DashboardPage() {
             <p className="mt-1 text-sm text-slate-500">
               {error || 'Add your Codeforces handle in onboarding before loading the dashboard.'}
             </p>
-            <Button className="mt-4" size="sm" onClick={() => refresh()}>
+            <Button className="mt-4" size="sm" onClick={() => refreshDashboard()}>
               Retry
             </Button>
           </div>
@@ -147,7 +157,7 @@ export function DashboardPage() {
                 : `You’re ${ratingGap} points away from your ${account.targetRating || 1600} target.`}
             </p>
           </div>
-          <Button onClick={() => refresh(undefined, { refresh: true })}>
+          <Button onClick={() => refreshDashboard(true)}>
             <RefreshCw size={16} /> Refresh live data
           </Button>
         </div>
@@ -248,13 +258,24 @@ export function DashboardPage() {
 
 export function AnalyzeHandlePage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { user: account } = useAuth()
   const { setReport: cacheReport } = useAnalytics()
   const [state, setState] = useState('idle')
-  const [handle, setHandle] = useState(account?.codeforcesHandle || '')
+  const [handle, setHandle] = useState(
+    searchParams.get('handle') || account?.codeforcesHandle || '',
+  )
   const [report, setReport] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    const requestedHandle = searchParams.get('handle')
+    if (requestedHandle) {
+      setHandle(requestedHandle)
+      setState('idle')
+    }
+  }, [searchParams])
   async function analyze() {
     if (!handle.trim()) {
       setErrorMessage('Enter a Codeforces handle to continue.')
@@ -269,9 +290,12 @@ export function AnalyzeHandlePage() {
       if (handle.trim().toLowerCase() === account?.codeforcesHandle?.toLowerCase()) {
         cacheReport(nextReport, handle.trim())
       }
+      toast.success(`Analysis completed for ${nextReport.profile.handle}`)
       setState('done')
     } catch (requestError) {
-      setErrorMessage(getApiErrorMessage(requestError))
+      const message = getApiErrorMessage(requestError)
+      setErrorMessage(message)
+      toast.error(message)
       setState('error')
     }
   }
@@ -282,11 +306,15 @@ export function AnalyzeHandlePage() {
   async function saveReport() {
     setSaving(true)
     setErrorMessage('')
+    const toastId = toast.loading('Saving performance report...')
     try {
       const saved = await reportApi.save(handle.trim())
+      toast.success('Report saved successfully', { id: toastId })
       navigate(`/report/${saved.id || saved._id}`)
     } catch (requestError) {
-      setErrorMessage(getApiErrorMessage(requestError))
+      const message = getApiErrorMessage(requestError)
+      setErrorMessage(message)
+      toast.error(message, { id: toastId })
     } finally {
       setSaving(false)
     }

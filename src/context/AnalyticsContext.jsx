@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import toast from 'react-hot-toast'
 import { analyticsApi } from '../services/analyticsApi'
 import { getApiErrorMessage } from '../services/apiClient'
 import { reportApi } from '../services/reportApi'
@@ -64,7 +65,7 @@ export function AnalyticsProvider({ children }) {
     } catch (requestError) {
       const message = getApiErrorMessage(requestError)
       setError(report ? `${message} Showing the cached report.` : message)
-      return report
+      return null
     } finally {
       setLoading(false)
     }
@@ -96,6 +97,7 @@ export function AnalyticsProvider({ children }) {
           if (active) {
             setReport(fallback)
             storeReport(key, fallback)
+            toast('Latest saved report loaded while live data refreshes.', { icon: '📄' })
           }
         } catch {
           // A saved report is optional; continue to the live cache/API path.
@@ -108,11 +110,17 @@ export function AnalyticsProvider({ children }) {
           setReport(live)
           storeReport(key, live)
           setError('')
+          toast.success(
+            live.cache?.cached ? 'Cached analytics ready' : 'Live Codeforces analytics ready',
+          )
         }
       } catch (requestError) {
         if (active) {
           const message = getApiErrorMessage(requestError)
           setError(fallback ? `${message} Showing the cached report.` : message)
+          toast.error(
+            fallback ? 'Live refresh failed; cached analytics remain available.' : message,
+          )
         }
       } finally {
         if (active) setLoading(false)

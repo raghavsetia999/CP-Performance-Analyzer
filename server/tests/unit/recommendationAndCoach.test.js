@@ -10,7 +10,13 @@ import {
 
 const recommendationInput = {
   topicAnalysis: [
-    { topic: 'Dynamic Programming', weakness: 82, attempted: 10, solved: 4, rate: 40 },
+    {
+      topic: 'Dynamic Programming',
+      weakness: 82,
+      attempted: 10,
+      solved: 4,
+      rate: 40,
+    },
     { topic: 'probabilities', weakness: 100, attempted: 1, solved: 0, rate: 0 },
   ],
   ratingAnalysis: [{ bucket: '1200–1400', attempted: 8, rate: 50, weakness: 65, weakTags: [] }],
@@ -81,12 +87,37 @@ describe('rule-based coach', () => {
   const report = {
     profile: { handle: 'fixture' },
     recommendations: buildRecommendations(recommendationInput),
+    topicAnalysis: [
+      {
+        topic: 'Geometry',
+        short: 'Geometry',
+        weakness: 90,
+        attempted: 5,
+        solved: 3,
+        rate: 60,
+        unsolved: 2,
+        verdicts: { wrongAnswer: 2, timeLimit: 0 },
+      },
+      {
+        topic: 'Dynamic Programming',
+        short: 'DP',
+        weakness: 82,
+        attempted: 10,
+        solved: 4,
+        rate: 40,
+        unsolved: 6,
+        avgAttemptsBeforeAc: 2.5,
+        verdicts: { wrongAnswer: 8, timeLimit: 1 },
+      },
+    ],
     upsolvingAnalysis: recommendationInput.upsolvingAnalysis,
     verdictAnalysis: recommendationInput.verdictAnalysis,
   }
 
   it('creates a seven-day plan without external AI', () => {
-    const result = generatePracticePlanFromReport(report, { preferredPracticeMinutes: 60 })
+    const result = generatePracticePlanFromReport(report, {
+      preferredPracticeMinutes: 60,
+    })
     expect(result.aiEnabled).toBe(false)
     expect(result.source).toBe('rule_based')
     expect(result.plan).toHaveLength(7)
@@ -96,5 +127,14 @@ describe('rule-based coach', () => {
     const result = answerCoachQuestion(report, 'What should I upsolve?')
     expect(result.aiEnabled).toBe(false)
     expect(result.answer).toContain('Example')
+  })
+
+  it('explains the topic named in the question instead of the top topic', () => {
+    const result = answerCoachQuestion(report, 'Explain why I am weak in DP')
+
+    expect(result.answer).toContain('Dynamic Programming')
+    expect(result.answer).toContain('4 of 10')
+    expect(result.answer).not.toContain('Geometry')
+    expect(result.suggestedActions[0]).toContain('Dynamic Programming')
   })
 })
