@@ -56,6 +56,39 @@ function formatRelativeTime(value) {
   return `${Math.floor(seconds / 86400)} days ago`
 }
 
+function formatReadableDate(value) {
+  if (!value) return 'No recorded activity'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Date unavailable'
+
+  const today = new Date()
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+  const dayDifference = Math.round((startOfToday - startOfDate) / 86400000)
+  const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+
+  if (dayDifference === 0) return `Today, ${time}`
+  if (dayDifference === 1) return `Yesterday, ${time}`
+  return date.toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+function formatFullDate(value) {
+  if (!value) return 'No recorded activity'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Date unavailable'
+  return date.toLocaleString(undefined, {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
 function AnalyticsState({ loading, error, onRetry }) {
   if (loading) return <LoadingState />
   async function retry() {
@@ -466,7 +499,14 @@ export function WeaknessReportPage() {
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {topics.slice(0, 10).map((x) => (
-          <WeaknessCard key={x.topic} item={x} />
+          <WeaknessCard
+            key={x.topic}
+            item={{
+              ...x,
+              lastLabel: formatReadableDate(x.last),
+              lastTitle: formatFullDate(x.last),
+            }}
+          />
         ))}
       </div>
       <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
@@ -543,7 +583,11 @@ export function WeaknessReportPage() {
             <tbody>
               {topics.map((x) => (
                 <tr key={x.topic} className="border-b border-white/[.04] last:border-0">
-                  <td className="px-5 py-4 font-medium">{x.topic}</td>
+                  <td className="max-w-56 px-5 py-4 font-medium">
+                    <span className="block truncate" title={x.topic}>
+                      {x.topic}
+                    </span>
+                  </td>
                   <td className="px-5 text-slate-400">{x.attempted}</td>
                   <td className="px-5 text-slate-400">{x.solved}</td>
                   <td className="px-5 text-slate-400">{x.failed}</td>
@@ -557,7 +601,9 @@ export function WeaknessReportPage() {
                       {x.weakness}
                     </Badge>
                   </td>
-                  <td className="px-5 text-slate-500">{formatRelativeTime(x.last)}</td>
+                  <td className="px-5 text-slate-500" title={formatFullDate(x.last)}>
+                    <span className="whitespace-nowrap">{formatReadableDate(x.last)}</span>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -575,8 +621,11 @@ export function RatingAnalysisPage() {
   const gap = buckets
     .filter((bucket) => bucket.attempted > 0)
     .sort((left, right) => right.weakness - left.weakness)[0]
-  const ratingProgress = report.summary.ratingHistory.slice(-12).map((change) => ({
-    month: new Date(change.changedAt).toLocaleDateString(undefined, { month: 'short' }),
+  const ratingProgress = report.summary.ratingHistory.slice(-20).map((change) => ({
+    month: new Date(change.changedAt).toLocaleDateString(undefined, {
+      month: 'short',
+      year: '2-digit',
+    }),
     rating: change.newRating,
   }))
   return (
@@ -603,7 +652,10 @@ export function RatingAnalysisPage() {
               <span>{x.avg} attempts</span>
             </div>
             {x.weakTags.length > 0 && (
-              <p className="mt-3 text-xs text-slate-600">
+              <p
+                className="mt-3 line-clamp-2 break-words text-xs leading-5 text-slate-600"
+                title={x.weakTags.map((tag) => tag.tag).join(', ')}
+              >
                 Weak tags · {x.weakTags.map((tag) => tag.tag).join(', ')}
               </p>
             )}
@@ -621,8 +673,17 @@ export function RatingAnalysisPage() {
         )}
       </InsightBanner>
       <div className="grid gap-4 xl:grid-cols-2">
-        <ChartCard title="Success rate by rating bucket">
-          <BarChartView data={buckets} />
+        <ChartCard
+          title="Success rate by rating bucket"
+          subtitle="Exact conversion shown above each discrete rating band"
+          chartClassName="h-72"
+        >
+          <BarChartView
+            data={buckets}
+            showValues
+            domain={[0, 100]}
+            ticks={[0, 20, 40, 60, 80, 100]}
+          />
         </ChartCard>
         <ChartCard
           title="Rating progress over time"

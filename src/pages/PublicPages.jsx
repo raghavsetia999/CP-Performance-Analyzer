@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import toast from 'react-hot-toast'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Activity,
   ArrowRight,
@@ -29,6 +29,7 @@ import { useAuth } from '../context/AuthContext'
 import { ratingData, topicData } from '../data/mockData'
 import { analyticsApi } from '../services/analyticsApi'
 import { getApiErrorMessage } from '../services/apiClient'
+import { authApi } from '../services/authApi'
 import { userApi } from '../services/userApi'
 
 const features = [
@@ -392,8 +393,44 @@ function FormError({ message }) {
     </div>
   )
 }
+
+function GoogleAuthButton({ label = 'Continue with Google' }) {
+  const [checking, setChecking] = useState(false)
+
+  async function startGoogleSignIn() {
+    setChecking(true)
+    try {
+      const { configured } = await authApi.googleStatus()
+      if (!configured) {
+        toast.error('Google sign-in needs GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET on the server.')
+        return
+      }
+      toast.loading('Opening Google sign-in…', { id: 'google-auth' })
+      window.location.assign(authApi.googleLoginUrl())
+    } catch (error) {
+      toast.error(getApiErrorMessage(error), { id: 'google-auth' })
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="secondary"
+      className="w-full"
+      onClick={startGoogleSignIn}
+      disabled={checking}
+    >
+      <span className="font-bold text-white">G</span>{' '}
+      {checking ? 'Checking Google sign-in…' : label}
+    </Button>
+  )
+}
+
 export function LoginPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { login } = useAuth()
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -430,6 +467,15 @@ export function LoginPage() {
       }
     >
       <form className="space-y-5" onSubmit={handleSubmit}>
+        {searchParams.get('oauth') && (
+          <FormError
+            message={
+              searchParams.get('oauth') === 'denied'
+                ? 'Google sign-in was cancelled.'
+                : 'Google sign-in could not be completed. Please try again.'
+            }
+          />
+        )}
         <FormError message={error} />
         <Field
           label="Email"
@@ -460,14 +506,7 @@ export function LoginPage() {
           {submitting ? 'Logging in…' : 'Log in'} <ArrowRight size={16} />
         </Button>
         <Divider />
-        <Button
-          type="button"
-          variant="secondary"
-          className="w-full"
-          onClick={() => toast('Google sign-in is not configured yet.', { icon: 'ℹ️' })}
-        >
-          <span className="font-bold text-white">G</span> Continue with Google
-        </Button>
+        <GoogleAuthButton />
       </form>
     </AuthShell>
   )
@@ -583,19 +622,36 @@ export function RegisterPage() {
           {submitting ? 'Creating account…' : 'Create free account'} <ArrowRight size={16} />
         </Button>
         <Divider />
-        <Button
-          type="button"
-          variant="secondary"
-          className="w-full"
-          onClick={() => toast('Google sign-up is not configured yet.', { icon: 'ℹ️' })}
-        >
-          <b>G</b> Continue with Google
-        </Button>
+        <GoogleAuthButton label="Sign up with Google" />
       </form>
     </AuthShell>
   )
 }
 export function ForgotPasswordPage() {
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [sent, setSent] = useState(false)
+  const [devResetUrl, setDevResetUrl] = useState('')
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    setError('')
+    setSubmitting(true)
+    try {
+      const result = await authApi.forgotPassword(form.get('email'))
+      setSent(true)
+      setDevResetUrl(result.devResetUrl || '')
+      toast.success('Password reset request accepted')
+    } catch (requestError) {
+      const message = getApiErrorMessage(requestError)
+      setError(message)
+      toast.error(message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <AuthShell
       title="Reset your password"
@@ -608,24 +664,111 @@ export function ForgotPasswordPage() {
         </p>
       }
     >
-      <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
-        <Field label="Email address" icon={Mail} type="email" placeholder="you@example.com" />
-        <Button
-          className="w-full"
-          type="button"
-          onClick={() =>
-            toast('Password reset email delivery is not configured yet.', { icon: 'ℹ️' })
-          }
-        >
-          Password reset coming next <ArrowRight size={16} />
+      <form className="space-y-5" onSubmit={handleSubmit}>
+        <FormError message={error} />
+        {sent && (
+          <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/[.06] p-4 text-sm text-emerald-100">
+            If an account exists for that email, a reset link has been prepared.
+          </div>
+        )}
+        <Field
+          label="Email address"
+          icon={Mail}
+          name="email"
+          type="email"
+          autoComplete="email"
+          placeholder="you@example.com"
+          required
+        />
+        <Button className="w-full" type="submit" disabled={submitting}>
+          {submitting ? 'Preparing reset link…' : 'Send reset link'} <ArrowRight size={16} />
         </Button>
         <div className="flex gap-3 rounded-xl border border-white/[.06] bg-white/[.025] p-4">
           <ShieldCheck size={18} className="shrink-0 text-emerald-400" />
           <p className="text-xs leading-5 text-slate-500">
-            Password reset email delivery is not configured yet. The button above explains the
-            current limitation without showing a false success state.
+            For privacy, the response is the same whether or not that email has an account. Reset
+            links expire automatically.
           </p>
         </div>
+        {devResetUrl && (
+          <a
+            href={devResetUrl}
+            className="block rounded-xl border border-amber-400/20 bg-amber-400/[.06] p-4 text-sm text-amber-200 hover:border-amber-400/40"
+          >
+            SMTP is not configured. Open the development reset link →
+          </a>
+        )}
+      </form>
+    </AuthShell>
+  )
+}
+
+export function ResetPasswordPage() {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const { resetPassword } = useAuth()
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const token = searchParams.get('token') || ''
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    if (form.get('password') !== form.get('confirmPassword')) {
+      setError('Passwords do not match.')
+      return
+    }
+
+    setError('')
+    setSubmitting(true)
+    try {
+      await resetPassword({ token, password: form.get('password') })
+      toast.success('Password updated. You are signed in.')
+      navigate('/dashboard', { replace: true })
+    } catch (requestError) {
+      const message = getApiErrorMessage(requestError)
+      setError(message)
+      toast.error(message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <AuthShell
+      title="Choose a new password"
+      subtitle="Use at least eight characters. This reset link can only be used once."
+      footer={
+        <p className="mt-7 text-center text-sm">
+          <Link to="/login" className="text-cyan-300">
+            ← Back to login
+          </Link>
+        </p>
+      }
+    >
+      <form className="space-y-5" onSubmit={handleSubmit}>
+        <FormError message={!token ? 'This reset link is missing its security token.' : error} />
+        <Field
+          label="New password"
+          icon={LockKeyhole}
+          name="password"
+          type="password"
+          autoComplete="new-password"
+          minLength={8}
+          required
+        />
+        <Field
+          label="Confirm new password"
+          icon={LockKeyhole}
+          name="confirmPassword"
+          type="password"
+          autoComplete="new-password"
+          minLength={8}
+          required
+        />
+        <Button className="w-full" type="submit" disabled={submitting || !token}>
+          {submitting ? 'Updating password…' : 'Update password'} <ArrowRight size={16} />
+        </Button>
       </form>
     </AuthShell>
   )

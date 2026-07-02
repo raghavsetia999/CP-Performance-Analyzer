@@ -6,6 +6,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   Line,
   LineChart,
   Pie,
@@ -31,14 +32,20 @@ export const chartTheme = { grid: '#1d2737', text: '#718096', cyan: '#22d3ee', v
 export function SectionHeader({ eyebrow, title, description, action }) {
   return (
     <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-      <div>
+      <div className="min-w-0">
         {eyebrow && (
           <p className="mb-1 font-mono text-[11px] uppercase tracking-[.18em] text-cyan-400">
             {eyebrow}
           </p>
         )}
-        <h2 className="text-xl font-semibold tracking-tight text-white sm:text-2xl">{title}</h2>
-        {description && <p className="mt-1 max-w-2xl text-sm text-slate-500">{description}</p>}
+        <h2 className="break-words text-xl font-semibold tracking-tight text-white sm:text-2xl">
+          {title}
+        </h2>
+        {description && (
+          <p className="mt-1 max-w-2xl break-words text-sm leading-6 text-slate-500">
+            {description}
+          </p>
+        )}
       </div>
       {action}
     </div>
@@ -57,10 +64,19 @@ export function StatCard({ label, value, icon: Icon, change, caption }) {
           </span>
         )}
       </div>
-      <div className="flex items-end justify-between">
-        <div>
-          <p className="text-2xl font-semibold tracking-tight">{value}</p>
-          {caption && <p className="mt-1 text-xs text-slate-600">{caption}</p>}
+      <div className="flex min-w-0 items-end justify-between gap-2">
+        <div className="min-w-0">
+          <p
+            className="line-clamp-2 break-words text-2xl font-semibold tracking-tight"
+            title={typeof value === 'string' ? value : undefined}
+          >
+            {value}
+          </p>
+          {caption && (
+            <p className="mt-1 line-clamp-2 break-words text-xs text-slate-600" title={caption}>
+              {caption}
+            </p>
+          )}
         </div>
         {change && (
           <span className={up ? 'text-emerald-400' : 'text-rose-400'}>
@@ -76,29 +92,46 @@ export function StatCard({ label, value, icon: Icon, change, caption }) {
     </Card>
   )
 }
-export function ChartCard({ title, subtitle, children, className }) {
+export function ChartCard({ title, subtitle, children, className, chartClassName }) {
   return (
     <Card className={`p-5 ${className || ''}`}>
       <div className="mb-5">
         <h3 className="font-semibold">{title}</h3>
         {subtitle && <p className="mt-1 text-xs text-slate-500">{subtitle}</p>}
       </div>
-      <div className="h-64">{children}</div>
+      <div className={chartClassName || 'h-64'}>{children}</div>
     </Card>
   )
 }
-export function BarChartView({ data, dataKey = 'rate', nameKey = 'bucket', color = '#22d3ee' }) {
+export function BarChartView({
+  data,
+  dataKey = 'rate',
+  nameKey = 'bucket',
+  color = '#22d3ee',
+  showValues = false,
+  domain,
+  ticks,
+}) {
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={data} margin={{ left: -25, right: 5 }}>
+      <BarChart data={data} margin={{ top: showValues ? 22 : 5, left: -18, right: 8, bottom: 4 }}>
         <CartesianGrid stroke={chartTheme.grid} vertical={false} />
         <XAxis
           dataKey={nameKey}
           tick={{ fill: chartTheme.text, fontSize: 11 }}
           axisLine={false}
           tickLine={false}
+          tickFormatter={(value) =>
+            String(value).length > 12 ? `${String(value).slice(0, 11)}…` : value
+          }
         />
-        <YAxis tick={{ fill: chartTheme.text, fontSize: 11 }} axisLine={false} tickLine={false} />
+        <YAxis
+          tick={{ fill: chartTheme.text, fontSize: 11 }}
+          axisLine={false}
+          tickLine={false}
+          domain={domain}
+          ticks={ticks}
+        />
         <Tooltip
           contentStyle={{
             background: '#111827',
@@ -108,7 +141,18 @@ export function BarChartView({ data, dataKey = 'rate', nameKey = 'bucket', color
           }}
           cursor={{ fill: 'rgba(0.1, 0.1, 0.1, 0.5)' }}
         />
-        <Bar dataKey={dataKey} fill={color} radius={[6, 6, 2, 2]} />
+        <Bar dataKey={dataKey} fill={color} radius={[6, 6, 2, 2]} maxBarSize={54} minPointSize={3}>
+          {showValues && (
+            <LabelList
+              dataKey={dataKey}
+              position="top"
+              formatter={(value) => `${value}%`}
+              fill="#cbd5e1"
+              fontSize={11}
+              fontWeight={600}
+            />
+          )}
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
   )
@@ -233,10 +277,17 @@ export function AIResponseCard({ title, children, icon: Icon = Sparkles }) {
 export function WeaknessCard({ item }) {
   return (
     <Card className="p-5 transition hover:border-rose-400/20">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="font-semibold">{item.short}</p>
-          <p className="mt-1 text-xs text-slate-500">Last practiced {item.last}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-semibold" title={item.topic || item.short}>
+            {item.short}
+          </p>
+          <p
+            className="mt-1 truncate text-xs text-slate-500"
+            title={item.lastTitle || item.lastLabel}
+          >
+            Last practiced {item.lastLabel || 'No recorded activity'}
+          </p>
         </div>
         <div className="text-right">
           <span className="font-mono text-2xl font-semibold text-rose-300">{item.weakness}</span>
@@ -306,8 +357,10 @@ export function ProblemTable({ problems, action = 'Upsolve' }) {
               key={p.contest || p.id}
               className="border-b border-white/[.045] last:border-0 hover:bg-white/[.025]"
             >
-              <td className="px-5 py-4">
-                <p className="font-medium text-slate-200">{p.name}</p>
+              <td className="max-w-72 px-5 py-4">
+                <p className="truncate font-medium text-slate-200" title={p.name}>
+                  {p.name}
+                </p>
                 <p className="font-mono text-xs text-slate-600">{p.contest || p.id}</p>
               </td>
               <td className="px-4">
@@ -350,14 +403,18 @@ export function PracticeDayCard({ item }) {
           <div className="grid h-11 w-11 place-items-center rounded-xl bg-white/[.06] font-mono text-sm text-cyan-300">
             {item.day}
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-xs text-slate-500">{item.label}</p>
-            <h3 className="font-semibold">{item.topic}</h3>
+            <h3 className="truncate font-semibold" title={item.topic}>
+              {item.topic}
+            </h3>
           </div>
         </div>
         <input type="checkbox" defaultChecked={item.done} className="h-5 w-5 accent-cyan-400" />
       </div>
-      <p className="mt-4 text-sm text-slate-400">{item.goal}</p>
+      <p className="mt-4 line-clamp-3 break-words text-sm text-slate-400" title={item.goal}>
+        {item.goal}
+      </p>
       <div className="mt-4 flex items-center gap-2">
         <RatingBadge>{item.range}</RatingBadge>
         <Badge>{item.count} problems</Badge>

@@ -25,6 +25,15 @@ function responseWith(value, finishReason = 'STOP') {
 }
 
 describe('Gemini provider', () => {
+  it('keeps coach answers concise enough for the frontend', () => {
+    expect(() =>
+      coachChatOutputSchema.parse({
+        answer: 'x'.repeat(1001),
+        suggestedActions: ['Review one failed problem.'],
+      }),
+    ).toThrow()
+  })
+
   it('requests schema-constrained JSON and validates the response', async () => {
     const post = vi.fn().mockResolvedValue(
       responseWith({

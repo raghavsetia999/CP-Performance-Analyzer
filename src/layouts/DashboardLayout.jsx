@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import toast from 'react-hot-toast'
+import toast, { resolveValue, useToasterStore } from 'react-hot-toast'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   Activity,
@@ -66,9 +66,9 @@ const groups = [
     ],
   },
 ]
-export function Brand({ compact = false }) {
+export function Brand({ compact = false, to = '/' }) {
   return (
-    <NavLink to="/" className="flex items-center gap-2.5">
+    <NavLink to={to} className="flex items-center gap-2.5">
       <span className="relative grid h-9 w-9 place-items-center overflow-hidden rounded-xl bg-cyan-400 text-slate-950">
         <Gauge size={20} />
         <span className="absolute bottom-0 h-1 w-full bg-violet-500" />
@@ -170,9 +170,39 @@ function notificationEvents(report, error) {
   return events
 }
 
+function toastNotification(item, href) {
+  const resolvedMessage = resolveValue(item.message, item)
+  const message =
+    typeof resolvedMessage === 'string' || typeof resolvedMessage === 'number'
+      ? String(resolvedMessage)
+      : 'A new application update is available.'
+  const presentation = {
+    error: { title: 'Action needed', tone: 'rose' },
+    success: { title: 'Completed', tone: 'cyan' },
+    blank: { title: 'Update', tone: 'amber' },
+    custom: { title: 'Update', tone: 'amber' },
+  }[item.type] || { title: 'Update', tone: 'cyan' }
+
+  return {
+    id: `toast:${item.createdAt}:${item.id}`,
+    title: presentation.title,
+    message,
+    createdAt: new Date(item.createdAt).toISOString(),
+    href,
+    tone: presentation.tone,
+    read: false,
+    source: 'toast',
+  }
+}
+
 function NotificationCenter({ user, report, error, navigate }) {
+  const location = useLocation()
+  const { toasts } = useToasterStore()
   const storageKey = `cp-pulse:notifications:${user?.id || 'anonymous'}`
   const [feed, setFeed] = useState(() => readNotificationState(storageKey))
+  const capturedToastIds = useRef(
+    new Set(feed.items.filter((item) => item.source === 'toast').map((item) => item.id)),
+  )
   const [open, setOpen] = useState(false)
   const [view, setView] = useState('recent')
   const containerRef = useRef(null)
@@ -194,6 +224,26 @@ function NotificationCenter({ user, report, error, navigate }) {
       return { ...current, items: [...unseenEvents, ...current.items].slice(0, 25) }
     })
   }, [error, report])
+
+  useEffect(() => {
+    const href = `${location.pathname}${location.search}`
+    const completedToasts = toasts
+      .filter((item) => item.type !== 'loading' && item.notificationFeed !== false)
+      .map((item) => toastNotification(item, href))
+      .filter((item) => !capturedToastIds.current.has(item.id))
+
+    if (!completedToasts.length) return
+    completedToasts.forEach((item) => capturedToastIds.current.add(item.id))
+    setFeed((current) => {
+      const existingIds = new Set(current.items.map((item) => item.id))
+      const dismissedIds = new Set(current.dismissed)
+      const unseenToasts = completedToasts.filter(
+        (item) => !existingIds.has(item.id) && !dismissedIds.has(item.id),
+      )
+      if (!unseenToasts.length) return current
+      return { ...current, items: [...unseenToasts, ...current.items].slice(0, 25) }
+    })
+  }, [location.pathname, location.search, toasts])
 
   useEffect(() => {
     function closeOnOutsideClick(event) {
@@ -242,7 +292,7 @@ function NotificationCenter({ user, report, error, navigate }) {
         ...new Set([...current.dismissed, ...current.items.map((item) => item.id)]),
       ].slice(-100),
     }))
-    toast.success('Notifications cleared')
+    toast.success('Notifications cleared', { notificationFeed: false })
   }
 
   return (
@@ -409,7 +459,7 @@ function NotificationCenter({ user, report, error, navigate }) {
                   {view === 'unseen' ? 'No unseen notifications' : 'No recent notifications'}
                 </p>
                 <p className="mt-1 text-xs text-slate-600">
-                  New analytics and practice alerts will appear here.
+                  Analytics, practice alerts, and toast updates will appear here.
                 </p>
               </div>
             )}
@@ -437,7 +487,7 @@ function Sidebar({ open, setOpen, collapsed, setCollapsed }) {
         )}
       >
         <div className="flex h-[72px] items-center justify-between border-b border-white/[.06] px-5">
-          <Brand compact={collapsed} />
+          <Brand compact={collapsed} to="/dashboard" />
           <button onClick={() => setOpen(false)} className="text-slate-500 lg:hidden">
             <X />
           </button>

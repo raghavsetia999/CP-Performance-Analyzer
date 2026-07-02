@@ -53,8 +53,8 @@ export const upsolvingPlanOutputSchema = z
 
 export const coachChatOutputSchema = z
   .object({
-    answer: conciseText(3000),
-    suggestedActions: z.array(conciseText(300)).max(3),
+    answer: conciseText(1000),
+    suggestedActions: z.array(conciseText(180)).max(3),
   })
   .strict()
 

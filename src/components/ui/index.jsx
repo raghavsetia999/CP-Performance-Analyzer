@@ -18,7 +18,7 @@ export function Button({ className, variant = 'primary', size = 'md', children, 
   return (
     <button
       className={cn(
-        'inline-flex shrink-0 items-center justify-center gap-2 rounded-xl font-semibold transition-all disabled:opacity-50',
+        'inline-flex shrink-0 items-center justify-center gap-2 rounded-xl font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 disabled:cursor-not-allowed disabled:opacity-50',
         variants[variant],
         sizes[size],
         className,
@@ -43,7 +43,7 @@ export function Input({ className, ...props }) {
   return (
     <input
       className={cn(
-        'h-11 w-full rounded-xl border border-white/[.08] bg-black/20 px-3.5 text-sm text-white outline-none placeholder:text-slate-600 focus:border-cyan-400/50 focus:ring-2 focus:ring-cyan-400/10',
+        'h-11 w-full rounded-xl border border-white/[.08] bg-black/20 px-3.5 text-sm text-white outline-none placeholder:text-slate-600 focus:border-cyan-400/50 focus:ring-2 focus:ring-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-60',
         className,
       )}
       {...props}
@@ -54,7 +54,7 @@ export function Select({ className, children, ...props }) {
   return (
     <select
       className={cn(
-        'h-11 rounded-xl border border-white/[.08] bg-[#111722] px-3.5 text-sm text-slate-300 outline-none focus:border-cyan-400/50',
+        'h-11 rounded-xl border border-white/[.08] bg-[#111722] px-3.5 text-sm text-slate-300 outline-none focus:border-cyan-400/50 focus:ring-2 focus:ring-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-60',
         className,
       )}
       {...props}

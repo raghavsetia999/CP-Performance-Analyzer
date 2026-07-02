@@ -30,4 +30,29 @@ describe('health API', () => {
     expect(response.status).toBe(400)
     expect(response.body.error.code).toBe('VALIDATION_ERROR')
   })
+
+  it('reports whether Google OAuth credentials are configured', async () => {
+    const response = await request(app).get('/api/auth/google/status')
+
+    expect(response.status).toBe(200)
+    expect(response.body.data.configured).toBeTypeOf('boolean')
+  })
+
+  it('rejects an invalid forgot-password email before database access', async () => {
+    const response = await request(app)
+      .post('/api/auth/forgot-password')
+      .send({ email: 'not-an-email' })
+
+    expect(response.status).toBe(400)
+    expect(response.body.error.code).toBe('VALIDATION_ERROR')
+  })
+
+  it('rejects an invalid reset-password payload before database access', async () => {
+    const response = await request(app)
+      .post('/api/auth/reset-password')
+      .send({ token: 'short', password: 'short' })
+
+    expect(response.status).toBe(400)
+    expect(response.body.error.code).toBe('VALIDATION_ERROR')
+  })
 })

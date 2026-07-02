@@ -31,8 +31,11 @@ function CoachMessage({ item }) {
       : 'Rule-based fallback'
 
   return (
-    <div className="max-w-xl rounded-2xl rounded-tl-sm border border-white/[.05] bg-white/[.045] p-5 text-sm text-slate-300">
-      <div className="space-y-3 leading-7">
+    <div className="max-w-2xl rounded-2xl rounded-tl-sm border border-white/[.05] bg-white/[.045] p-5 text-sm text-slate-300">
+      <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+        Quick answer
+      </p>
+      <div className="space-y-3 break-words leading-6">
         {paragraphs.map((paragraph, index) => (
           <p key={`${paragraph.slice(0, 30)}-${index}`} className="whitespace-pre-line">
             {paragraph}
@@ -45,13 +48,18 @@ function CoachMessage({ item }) {
             Evidence from your data
           </p>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            {item.evidence.map((fact, index) => (
+            {item.evidence.slice(0, 4).map((fact, index) => (
               <div
                 key={`${fact.label}-${index}`}
                 className="rounded-xl border border-white/[.05] bg-black/15 p-3"
               >
                 <p className="text-[10px] text-slate-600">{fact.label}</p>
-                <p className="mt-1 text-xs font-medium text-slate-300">{fact.value}</p>
+                <p
+                  className="mt-1 line-clamp-2 break-words text-xs font-medium text-slate-300"
+                  title={String(fact.value)}
+                >
+                  {fact.value}
+                </p>
               </div>
             ))}
           </div>
@@ -64,7 +72,10 @@ function CoachMessage({ item }) {
           </p>
           <ul className="mt-3 space-y-2">
             {item.suggestedActions.map((action, index) => (
-              <li key={`${action}-${index}`} className="flex gap-2 leading-6 text-slate-400">
+              <li
+                key={`${action}-${index}`}
+                className="flex min-w-0 gap-2 break-words leading-6 text-slate-400"
+              >
                 <span className="font-mono text-cyan-400">{index + 1}.</span>
                 <span>{action}</span>
               </li>
@@ -224,7 +235,7 @@ export function AICoachPage() {
             </div>
             {chat.map((item, index) => (
               <div key={`${item.question}-${index}`} className="space-y-3">
-                <div className="ml-auto max-w-xl rounded-2xl rounded-tr-sm bg-cyan-400 p-4 text-sm text-slate-950">
+                <div className="ml-auto max-w-xl break-words rounded-2xl rounded-tr-sm bg-cyan-400 p-4 text-sm text-slate-950">
                   {item.question}
                 </div>
                 <CoachMessage item={item} />
@@ -244,6 +255,8 @@ export function AICoachPage() {
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
                 placeholder="Ask about your performance or request a plan…"
+                maxLength={1000}
+                aria-label="Ask the AI performance coach"
               />
               <Button
                 size="icon"

@@ -29,3 +29,14 @@ export const registerSchema = {
 export const loginSchema = {
   body: z.object({ email, password: z.string().min(1) }),
 }
+
+export const forgotPasswordSchema = {
+  body: z.object({ email }),
+}
+
+export const resetPasswordSchema = {
+  body: z.object({
+    token: z.string().trim().min(32).max(256),
+    password,
+  }),
+}

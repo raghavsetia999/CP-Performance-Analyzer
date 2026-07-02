@@ -10,6 +10,7 @@ const LandingPage = loadPage(() => import('./pages/PublicPages'), 'LandingPage')
 const LoginPage = loadPage(() => import('./pages/PublicPages'), 'LoginPage')
 const RegisterPage = loadPage(() => import('./pages/PublicPages'), 'RegisterPage')
 const ForgotPasswordPage = loadPage(() => import('./pages/PublicPages'), 'ForgotPasswordPage')
+const ResetPasswordPage = loadPage(() => import('./pages/PublicPages'), 'ResetPasswordPage')
 const OnboardingPage = loadPage(() => import('./pages/PublicPages'), 'OnboardingPage')
 const NotFoundPage = loadPage(() => import('./pages/PublicPages'), 'NotFoundPage')
 const DashboardPage = loadPage(() => import('./pages/AnalyticsPages'), 'DashboardPage')
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route element={<ProtectedRoute />}>
           <Route path="/onboarding" element={<OnboardingPage />} />
           <Route element={<DashboardLayout />}>

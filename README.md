@@ -9,6 +9,7 @@ and focused practice guidance.
 - Express API foundation with security, validation, and consistent error responses
 - MongoDB User and Report models
 - Cookie-based JWT authentication and onboarding APIs
+- Session-aware public navigation, Google OAuth, and one-time password reset links
 - Codeforces profile, submission, and rating-history adapter
 - Stable submission normalization and unique-problem grouping
 - Explainable topic weakness engine with unit tests
@@ -48,6 +49,22 @@ npm run dev
 The API defaults to `http://localhost:5000`; the frontend defaults to
 `http://localhost:5000/api`.
 
+### Google sign-in and password email setup
+
+Create a Google OAuth 2.0 Web application and register these local values:
+
+- Authorized JavaScript origin: `http://localhost:5173`
+- Authorized redirect URI: `http://localhost:5000/api/auth/google/callback`
+
+Then set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `server/.env`. Keep both values on the
+server; they must never use the `VITE_` prefix. For deployed environments, also update
+`CLIENT_ORIGIN`, `GOOGLE_CALLBACK_URL`, and `PASSWORD_RESET_URL` to the HTTPS production URLs.
+
+Password reset email uses the `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, and
+`SMTP_FROM` settings documented in `server/.env.example`. When SMTP is intentionally absent in local
+development, the forgot-password response supplies a development-only reset link. Production never
+returns this link.
+
 ## Validation
 
 ```bash
@@ -58,7 +75,7 @@ cd server
 npm test
 ```
 
-The backend currently has 28 tests covering API validation, Codeforces mapping and caching,
+The backend currently has 32 tests covering API validation, Codeforces mapping and caching,
 analytics, unseen recommendations, report/PDF payloads, progress history, the rule-based coach, and
 the guarded Gemini provider.
 
