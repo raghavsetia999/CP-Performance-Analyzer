@@ -53,7 +53,14 @@ export function createGeminiProvider({
     isEnabled() {
       return env.AI_PROVIDER === 'gemini' && Boolean(normalizedKey)
     },
-    async generateStructured({ systemInstruction, task, input, jsonSchema, outputSchema }) {
+    async generateStructured({
+      systemInstruction,
+      task,
+      input,
+      jsonSchema,
+      outputSchema,
+      temperature = 0.2,
+    }) {
       if (!normalizedKey) throw new GeminiProviderError('GEMINI_NOT_CONFIGURED')
 
       const serializedInput = JSON.stringify(input)
@@ -74,7 +81,9 @@ export function createGeminiProvider({
             ],
             generationConfig: {
               candidateCount: 1,
-              temperature: 0.2,
+              // Grounded analytics remain deterministic; general explanations can opt
+              // into a moderately creative value without changing provider defaults.
+              temperature: Math.min(1, Math.max(0, temperature)),
               maxOutputTokens,
               responseMimeType: 'application/json',
               responseJsonSchema: jsonSchema,

@@ -124,9 +124,14 @@ describe('rule-based coach', () => {
   })
 
   it('answers chat prompts from deterministic report facts', () => {
-    const result = answerCoachQuestion(report, 'What should I upsolve?')
+    const result = answerCoachQuestion(report, 'What should I upsolve?', {
+      preferredPracticeMinutes: 120,
+    })
     expect(result.aiEnabled).toBe(false)
     expect(result.answer).toContain('Example')
+    expect(result.answer).toContain('120 minutes')
+    expect(result.answer).toContain('2–4 timed problem attempts')
+    expect(result.practiceBudget.weeklyTargetRange).toEqual({ minimum: 14, maximum: 28 })
   })
 
   it('explains the topic named in the question instead of the top topic', () => {
@@ -136,5 +141,13 @@ describe('rule-based coach', () => {
     expect(result.answer).toContain('4 of 10')
     expect(result.answer).not.toContain('Geometry')
     expect(result.suggestedActions[0]).toContain('Dynamic Programming')
+  })
+
+  it('does not substitute analytics for a general-knowledge question', () => {
+    const result = answerCoachQuestion(report, 'What is dynamic programming?')
+
+    expect(result.answerMode).toBe('general_knowledge')
+    expect(result.evidence).toEqual([])
+    expect(result.answer).not.toContain('Geometry')
   })
 })

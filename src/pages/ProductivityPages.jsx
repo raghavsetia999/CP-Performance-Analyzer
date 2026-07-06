@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   Activity,
   CheckCircle2,
@@ -88,37 +88,110 @@ function displayVerdict(verdict) {
   )
 }
 
-const Filters = () => (
-  <div className="flex flex-wrap gap-2">
-    <Select>
-      <option>All topics</option>
-      <option>Dynamic Programming</option>
-      <option>Graphs</option>
-    </Select>
-    <Select>
-      <option>All ratings</option>
-      <option>1200–1400</option>
-      <option>1400–1600</option>
-    </Select>
-    <Select>
-      <option>All verdicts</option>
-      <option>Wrong answer</option>
-      <option>Time limit</option>
-    </Select>
-    <Select>
-      <option>All contests</option>
-      <option>Div. 2</option>
-      <option>Div. 3</option>
-    </Select>
-  </div>
-)
+const defaultProblemFilters = { topic: 'all', rating: 'all', verdict: 'all', priority: 'all' }
+
+function ratingMatches(rating, range) {
+  if (range === 'all') return true
+  if (range === 'unrated') return rating == null
+  if (rating == null) return false
+  if (range === 'under-1200') return rating < 1200
+  if (range === '1800-plus') return rating >= 1800
+  const [minimum, maximum] = range.split('-').map(Number)
+  return rating >= minimum && rating < maximum
+}
+
+function filterProblems(problems, filters) {
+  return problems.filter((problem) => {
+    const topicMatches =
+      filters.topic === 'all' ||
+      (problem.tags || []).some((tag) => tag.toLowerCase() === filters.topic.toLowerCase())
+    const verdictMatches =
+      filters.verdict === 'all' || String(problem.verdict || '') === filters.verdict
+    const priorityMatches =
+      filters.priority === 'all' ||
+      String(problem.priorityLevel || problem.priority || '') === filters.priority
+    return (
+      topicMatches &&
+      ratingMatches(problem.rating, filters.rating) &&
+      verdictMatches &&
+      priorityMatches
+    )
+  })
+}
+
+function ProblemFilters({
+  problems,
+  filters,
+  onChange,
+  showVerdict = false,
+  showPriority = false,
+}) {
+  const topics = [...new Set(problems.flatMap((problem) => problem.tags || []))].sort((a, b) =>
+    a.localeCompare(b),
+  )
+  const verdicts = [...new Set(problems.map((problem) => problem.verdict).filter(Boolean))].sort()
+  const priorities = [
+    ...new Set(
+      problems.map((problem) => problem.priorityLevel || problem.priority).filter(Boolean),
+    ),
+  ]
+  const update = (key) => (event) => onChange({ ...filters, [key]: event.target.value })
+
+  return (
+    <div className="flex max-w-full flex-wrap gap-2">
+      <Select aria-label="Filter by topic" value={filters.topic} onChange={update('topic')}>
+        <option value="all">All topics</option>
+        {topics.map((topic) => (
+          <option key={topic} value={topic}>
+            {topic}
+          </option>
+        ))}
+      </Select>
+      <Select aria-label="Filter by rating" value={filters.rating} onChange={update('rating')}>
+        <option value="all">All ratings</option>
+        <option value="unrated">Unrated</option>
+        <option value="under-1200">Below 1200</option>
+        <option value="1200-1400">1200–1399</option>
+        <option value="1400-1600">1400–1599</option>
+        <option value="1600-1800">1600–1799</option>
+        <option value="1800-plus">1800+</option>
+      </Select>
+      {showVerdict && (
+        <Select aria-label="Filter by verdict" value={filters.verdict} onChange={update('verdict')}>
+          <option value="all">All verdicts</option>
+          {verdicts.map((verdict) => (
+            <option key={verdict} value={verdict}>
+              {verdict}
+            </option>
+          ))}
+        </Select>
+      )}
+      {showPriority && (
+        <Select
+          aria-label="Filter by priority"
+          value={filters.priority}
+          onChange={update('priority')}
+        >
+          <option value="all">All priorities</option>
+          {priorities.map((priority) => (
+            <option key={priority} value={priority}>
+              {priority} priority
+            </option>
+          ))}
+        </Select>
+      )}
+    </div>
+  )
+}
 export function UpsolvingPage() {
   const { report, loading, error, refresh } = useAnalytics()
+  const [filters, setFilters] = useState(defaultProblemFilters)
   if (!report) return <DataState loading={loading} error={error} onRetry={refresh} />
   const queue = report.upsolvingAnalysis.map((problem) => ({
     ...problem,
     verdict: displayVerdict(problem.lastVerdict),
   }))
+  const filteredQueue = filterProblems(queue, filters)
   const highPriority = queue.filter((problem) => problem.priorityLevel === 'High').length
   return (
     <div className="space-y-6">
@@ -167,9 +240,20 @@ export function UpsolvingPage() {
               Problems you submitted during a contest but never solved
             </p>
           </div>
-          <Filters />
+          <ProblemFilters
+            problems={queue}
+            filters={filters}
+            onChange={setFilters}
+            showVerdict
+            showPriority
+          />
         </div>
-        <ProblemTable problems={queue} />
+        <ProblemTable problems={filteredQueue} />
+        {!filteredQueue.length && (
+          <p className="border-t border-white/[.06] p-6 text-center text-sm text-slate-500">
+            No upsolving problems match these filters.
+          </p>
+        )}
       </Card>
       <Card className="p-6">
         <SectionHeader
@@ -177,7 +261,7 @@ export function UpsolvingPage() {
           description="An efficient sequence based on dependencies and expected learning gain"
         />
         <div className="grid gap-3 lg:grid-cols-3">
-          {queue.slice(0, 3).map((p, i) => (
+          {filteredQueue.slice(0, 3).map((p, i) => (
             <div
               key={p.contest}
               className="flex gap-4 rounded-xl border border-white/[.06] bg-black/15 p-4"
@@ -185,9 +269,14 @@ export function UpsolvingPage() {
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-cyan-400/10 font-mono text-cyan-300">
                 0{i + 1}
               </span>
-              <div>
-                <p className="text-sm font-medium">{p.name}</p>
-                <p className="mt-1 text-xs text-slate-600">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium" title={p.name}>
+                  {p.name}
+                </p>
+                <p
+                  className="mt-1 truncate text-xs text-slate-600"
+                  title={`${p.contest} · ${p.rating ?? 'Unrated'}`}
+                >
                   {p.contest} · {p.rating}
                 </p>
               </div>
@@ -201,8 +290,11 @@ export function UpsolvingPage() {
 
 export function RecommendationsPage() {
   const { report, loading, error, refresh } = useAnalytics()
+  const [filters, setFilters] = useState(defaultProblemFilters)
   if (!report) return <DataState loading={loading} error={error} onRetry={refresh} />
   const recommendation = report.recommendations
+  const recommendedProblems = recommendation.recommendedProblems || []
+  const filteredProblems = filterProblems(recommendedProblems, filters)
   return (
     <div className="space-y-6">
       <SectionHeader
@@ -223,7 +315,7 @@ export function RecommendationsPage() {
         }
       />
       <Card className="p-5">
-        <Filters />
+        <ProblemFilters problems={recommendedProblems} filters={filters} onChange={setFilters} />
         <div className="mt-4 flex flex-wrap gap-2">
           {recommendation.focusTopics.map((topic) => (
             <Badge key={topic.topic} tone="cyan">
@@ -234,18 +326,20 @@ export function RecommendationsPage() {
         </div>
       </Card>
       <div className="grid gap-4 lg:grid-cols-2">
-        {recommendation.recommendedProblems.map((p, i) => (
+        {filteredProblems.map((p, i) => (
           <Card
             key={p.id}
             className="group p-5 transition hover:-translate-y-0.5 hover:border-cyan-400/20"
           >
             <div className="flex items-start justify-between gap-4">
-              <div>
+              <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-mono text-xs text-slate-600">{p.id}</span>
                   {i < 2 && <Badge tone="cyan">Best match</Badge>}
                 </div>
-                <h3 className="mt-2 text-lg font-semibold">{p.name}</h3>
+                <h3 className="mt-2 line-clamp-2 break-words text-lg font-semibold" title={p.name}>
+                  {p.name}
+                </h3>
               </div>
               <RatingBadge>{p.rating}</RatingBadge>
             </div>
@@ -258,7 +352,12 @@ export function RecommendationsPage() {
               <p className="text-[10px] uppercase tracking-wider text-slate-600">
                 Why this problem
               </p>
-              <p className="mt-1 text-sm leading-6 text-slate-400">{p.reason}</p>
+              <p
+                className="mt-1 line-clamp-4 break-words text-sm leading-6 text-slate-400"
+                title={p.reason}
+              >
+                {p.reason}
+              </p>
             </div>
             <a href={p.url || undefined} target="_blank" rel="noreferrer">
               <Button variant="secondary" size="sm" className="mt-4">
@@ -268,6 +367,11 @@ export function RecommendationsPage() {
           </Card>
         ))}
       </div>
+      {!filteredProblems.length && (
+        <Card className="p-8 text-center text-sm text-slate-500">
+          No recommended problems match these filters.
+        </Card>
+      )}
     </div>
   )
 }
@@ -277,6 +381,31 @@ export function ProgressPage() {
   const [progress, setProgress] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [dateRange, setDateRange] = useState('6m')
+
+  const visiblePoints = useMemo(() => {
+    const points = progress?.points || []
+    if (dateRange === 'all' || !points.length) return points
+    const latestTimestamp = Math.max(
+      ...points.map((point) => new Date(point.generatedAt).getTime()).filter(Number.isFinite),
+    )
+    const cutoff = new Date(latestTimestamp)
+    cutoff.setMonth(cutoff.getMonth() - (dateRange === '6m' ? 6 : 12))
+    return points.filter((point) => new Date(point.generatedAt) >= cutoff)
+  }, [dateRange, progress])
+
+  const visibleTopicImprovement = useMemo(() => {
+    if (visiblePoints.length < 2) return []
+    const firstTopics = visiblePoints[0].topics || {}
+    const latestTopics = visiblePoints.at(-1).topics || {}
+    return Object.keys(latestTopics)
+      .filter((topic) => firstTopics[topic] != null)
+      .map((topic) => ({
+        topic,
+        improvement: firstTopics[topic] - latestTopics[topic],
+      }))
+      .sort((left, right) => right.improvement - left.improvement)
+  }, [visiblePoints])
 
   async function loadProgress() {
     if (!account?.codeforcesHandle) {
@@ -323,8 +452,8 @@ export function ProgressPage() {
     )
   }
 
-  const first = progress.points[0]
-  const latest = progress.points.at(-1)
+  const first = visiblePoints[0]
+  const latest = visiblePoints.at(-1)
   return (
     <div className="space-y-6">
       <SectionHeader
@@ -332,9 +461,14 @@ export function ProgressPage() {
         title="Progress tracking"
         description="The trends that matter after the contest ends."
         action={
-          <Select>
-            <option>Last 6 months</option>
-            <option>Last year</option>
+          <Select
+            aria-label="Filter progress by date range"
+            value={dateRange}
+            onChange={(event) => setDateRange(event.target.value)}
+          >
+            <option value="6m">Last 6 months</option>
+            <option value="12m">Last year</option>
+            <option value="all">All time</option>
           </Select>
         }
       />
@@ -359,13 +493,13 @@ export function ProgressPage() {
       </div>
       <div className="grid gap-4 xl:grid-cols-2">
         <ChartCard title="Solved count trend" subtitle="Saved report snapshots">
-          <TrendChart data={progress.points} dataKey="solved" />
+          <TrendChart data={visiblePoints} dataKey="solved" />
         </ChartCard>
         <ChartCard title="Rating progression" subtitle="Saved report snapshots">
-          <TrendChart data={progress.points} dataKey="rating" />
+          <TrendChart data={visiblePoints} dataKey="rating" />
         </ChartCard>
         <ChartCard title="Weakness score trend" subtitle="Lower is better">
-          <TrendChart data={progress.points} dataKey="weakness" />
+          <TrendChart data={visiblePoints} dataKey="weakness" />
         </ChartCard>
         <Card className="p-6">
           <SectionHeader
@@ -373,18 +507,25 @@ export function ProgressPage() {
             description="Positive means weakness decreased"
           />
           <div className="space-y-3">
-            {progress.topicImprovement.slice(0, 6).map((topic) => (
+            {visibleTopicImprovement.slice(0, 6).map((topic) => (
               <div
                 key={topic.topic}
-                className="flex items-center justify-between rounded-xl bg-black/20 p-3"
+                className="flex min-w-0 items-center justify-between gap-3 rounded-xl bg-black/20 p-3"
               >
-                <span className="text-sm">{topic.topic}</span>
+                <span className="min-w-0 truncate text-sm" title={topic.topic}>
+                  {topic.topic}
+                </span>
                 <Badge tone={topic.improvement > 0 ? 'green' : 'amber'}>
                   {topic.improvement > 0 ? '+' : ''}
                   {topic.improvement}
                 </Badge>
               </div>
             ))}
+            {!visibleTopicImprovement.length && (
+              <p className="rounded-xl bg-black/20 p-4 text-sm text-slate-500">
+                Save at least two reports in this date range to compare topic improvement.
+              </p>
+            )}
           </div>
         </Card>
       </div>
@@ -462,7 +603,7 @@ export function ProfilePage() {
                 className="h-20 w-20 rounded-2xl border-4 border-[#0e131d] text-xl"
               />
               <div className="pb-1">
-                <h2 className="text-xl font-semibold">{account?.name}</h2>
+                <h2 className="break-words text-xl font-semibold">{account?.name}</h2>
                 <p className="text-sm text-slate-500">
                   @{account?.codeforcesHandle || 'No handle connected'}
                 </p>
@@ -553,15 +694,18 @@ export function ProfilePage() {
                 key={savedReport._id || savedReport.id}
                 className="flex items-center justify-between rounded-xl p-3 hover:bg-white/[.03]"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                   <FileText size={17} className="text-slate-600" />
-                  <div>
-                    <p className="text-sm">Analysis for {savedReport.handle}</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm" title={`Analysis for ${savedReport.handle}`}>
+                      Analysis for {savedReport.handle}
+                    </p>
                     <p className="text-xs text-slate-600">
                       {new Date(savedReport.generatedAt).toLocaleString()}
                     </p>
                   </div>
                 </div>
+                {savedReport.reportType === 'weekly' && <Badge tone="violet">Weekly</Badge>}
                 <ChevronRight size={15} className="text-slate-700" />
               </Link>
             ))}
@@ -608,11 +752,13 @@ function Connected({ icon: Icon, name, value, active }) {
 const settingsTabs = ['Account', 'Codeforces', 'Notifications', 'AI Coach', 'Data Refresh']
 export function SettingsPage() {
   const { user: account, updateUser } = useAuth()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedTab = searchParams.get('tab')
   const [tab, setTab] = useState(settingsTabs.includes(requestedTab) ? requestedTab : 'Account')
   const [preferences, setPreferences] = useState(account?.preferences || {})
   const [saving, setSaving] = useState(false)
+  const [generatingWeekly, setGeneratingWeekly] = useState(false)
   const [message, setMessage] = useState('')
 
   useEffect(() => setPreferences(account?.preferences || {}), [account?.preferences])
@@ -686,6 +832,28 @@ export function SettingsPage() {
       toast.error(errorMessage)
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function getWeeklyReport() {
+    setGeneratingWeekly(true)
+    setMessage('')
+    const toastId = toast.loading('Preparing your weekly report...')
+    try {
+      const nextUser = await userApi.updatePreferences(preferences)
+      updateUser(nextUser)
+      const result = await reportApi.ensureWeekly()
+      const reportId = result.report?.id || result.report?._id
+      toast.success(result.generated ? 'Weekly report generated' : 'Latest weekly report opened', {
+        id: toastId,
+      })
+      if (reportId) navigate(`/report/${reportId}`)
+    } catch (requestError) {
+      const errorMessage = getApiErrorMessage(requestError)
+      setMessage(errorMessage)
+      toast.error(errorMessage, { id: toastId })
+    } finally {
+      setGeneratingWeekly(false)
     }
   }
 
@@ -785,6 +953,24 @@ export function SettingsPage() {
                     onToggle={() => togglePreference(key)}
                   />
                 ))}
+                {tab === 'Notifications' && preferences.weeklyReport && (
+                  <div className="rounded-xl border border-cyan-400/15 bg-cyan-400/[.04] p-4">
+                    <p className="text-sm font-medium text-cyan-200">Weekly report delivery</p>
+                    <p className="mt-1 break-words text-xs leading-5 text-slate-500">
+                      A fresh snapshot is generated on your next signed-in visit after seven days.
+                      You can also open the current weekly report now.
+                    </p>
+                    <Button
+                      className="mt-3"
+                      size="sm"
+                      onClick={getWeeklyReport}
+                      disabled={generatingWeekly}
+                    >
+                      <FileText size={14} />
+                      {generatingWeekly ? 'Preparing...' : 'Get weekly report'}
+                    </Button>
+                  </div>
+                )}
                 <Button className="mt-3" onClick={savePreferences} disabled={saving}>
                   Save preferences
                 </Button>
@@ -827,7 +1013,11 @@ function SettingField({ label, value, type = 'text', name, readOnly = false }) {
 function getSettings(tab) {
   const map = {
     Notifications: [
-      ['weeklyReport', 'Weekly report', 'Receive a weekly improvement summary.'],
+      [
+        'weeklyReport',
+        'Weekly performance report',
+        'Generate a downloadable progress snapshot every seven days when you use CP Pulse.',
+      ],
       ['streakReminders', 'Streak reminders', 'Get notified before a streak expires.'],
       ['contestReminders', 'Contest reminder', 'Remind me about upcoming Codeforces rounds.'],
     ],
@@ -943,11 +1133,15 @@ export function ReportDetailsPage() {
     <div className="space-y-6">
       <SectionHeader
         eyebrow={`Generated ${new Date(report.generatedAt).toLocaleString()}`}
-        title="Full performance report"
+        title={
+          report.reportType === 'weekly' ? 'Weekly performance report' : 'Full performance report'
+        }
         description={`A saved snapshot of ${report.handle} based on ${report.summary.totalSubmissions} submissions.`}
         action={
           <div className="flex gap-2">
-            <Badge tone="green">Saved report</Badge>
+            <Badge tone={report.reportType === 'weekly' ? 'violet' : 'green'}>
+              {report.reportType === 'weekly' ? 'Weekly report' : 'Saved report'}
+            </Badge>
             <Button onClick={exportPdf} disabled={exporting}>
               <Download size={15} /> {exporting ? 'Exporting...' : 'Export PDF'}
             </Button>

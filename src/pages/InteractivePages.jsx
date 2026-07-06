@@ -1,6 +1,15 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
-import { Bot, CalendarDays, Check, ChevronRight, RefreshCw, Send, Sparkles } from 'lucide-react'
+import {
+  Bot,
+  CalendarDays,
+  Check,
+  ChevronRight,
+  LoaderCircle,
+  RefreshCw,
+  Send,
+  Sparkles,
+} from 'lucide-react'
 import {
   AIResponseCard,
   InsightBanner,
@@ -29,6 +38,8 @@ function CoachMessage({ item }) {
     item.source === 'gemini'
       ? `Gemini${item.model ? ` · ${item.model}` : ''}`
       : 'Rule-based fallback'
+  const primarySource =
+    item.answerMode === 'general_knowledge' ? 'General model knowledge' : 'Codeforces API analytics'
 
   return (
     <div className="max-w-2xl rounded-2xl rounded-tl-sm border border-white/[.05] bg-white/[.045] p-5 text-sm text-slate-300">
@@ -66,32 +77,53 @@ function CoachMessage({ item }) {
         </div>
       )}
       {item.suggestedActions?.length > 0 && (
-        <div className="mt-5 rounded-xl bg-cyan-400/[.05] p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300">
-            Recommended next steps
-          </p>
-          <ul className="mt-3 space-y-2">
+        <div className="mt-5 rounded-2xl border border-cyan-400/10 bg-cyan-400/[.04] p-4">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300">
+              Recommended next steps
+            </p>
+            <p className="mt-1 text-[11px] text-slate-600">Follow these in order.</p>
+          </div>
+          <ol className="mt-3 space-y-2.5">
             {item.suggestedActions.map((action, index) => (
               <li
                 key={`${action}-${index}`}
-                className="flex min-w-0 gap-2 break-words leading-6 text-slate-400"
+                className="group flex min-w-0 gap-3 rounded-xl border border-white/[.05] bg-slate-950/30 p-3 transition hover:border-cyan-400/15 hover:bg-cyan-400/[.03]"
               >
-                <span className="font-mono text-cyan-400">{index + 1}.</span>
-                <span>{action}</span>
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-cyan-400/10 font-mono text-xs font-semibold text-cyan-300">
+                  {index + 1}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">
+                    Step {index + 1}
+                  </p>
+                  <p className="mt-0.5 break-words leading-5 text-slate-300">
+                    {action.replace(/^\d+[.)]\s*/, '')}
+                  </p>
+                </div>
               </li>
             ))}
-          </ul>
+          </ol>
         </div>
       )}
       {item.fallbackReason && (
         <div className="mt-4 rounded-xl border border-amber-400/15 bg-amber-400/[.05] px-3 py-2 text-[11px] leading-5 text-amber-200/80">
-          {item.fallbackReason === 'gemini_rate_limited'
-            ? 'Gemini quota is temporarily exhausted. This answer was produced from the same verified analytics by the deterministic fallback.'
-            : 'Gemini was temporarily unavailable. This answer was produced from the same verified analytics by the deterministic fallback.'}
+          {item.answerMode === 'general_knowledge'
+            ? 'Gemini is temporarily unavailable, so a general-knowledge answer could not be generated safely.'
+            : item.fallbackReason === 'gemini_rate_limited'
+              ? 'Gemini quota is temporarily exhausted. This answer was produced from the same verified analytics by the deterministic fallback.'
+              : 'Gemini was temporarily unavailable. This answer was produced from the same verified analytics by the deterministic fallback.'}
         </div>
       )}
       <div className="mt-5 flex flex-wrap gap-x-4 gap-y-1 border-t border-white/[.06] pt-3 text-[10px] text-slate-600">
-        <span>Primary data: Codeforces API analytics</span>
+        <span>Primary source: {primarySource}</span>
+        {item.practiceBudget && (
+          <span>
+            Daily budget: {item.practiceBudget.dailyMinutes} min · Target:{' '}
+            {item.practiceBudget.difficultProblemsPerDay}–{item.practiceBudget.targetProblemsPerDay}{' '}
+            attempts/day
+          </span>
+        )}
         <span>Response engine: {responseEngine}</span>
       </div>
     </div>
@@ -104,36 +136,58 @@ export function AICoachPage() {
   const [message, setMessage] = useState('')
   const [chat, setChat] = useState([])
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState('')
   const [coachSource, setCoachSource] = useState(null)
+  const requestInFlight = useRef(false)
+  const chatViewport = useRef(null)
+
+  useEffect(() => {
+    const viewport = chatViewport.current
+    if (!viewport) return
+    viewport.scrollTo({ top: viewport.scrollHeight, behavior: 'smooth' })
+  }, [chat])
+
   async function send(value = message) {
     const question = value.trim()
-    if (!question || !account?.codeforcesHandle) return
+    if (!question || !account?.codeforcesHandle || requestInFlight.current) return
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    requestInFlight.current = true
     setSubmitting(true)
-    setError('')
+    setMessage('')
+    setChat((items) => [...items, { id: requestId, question, pending: true }])
     try {
       const response = await aiApi.chat(account.codeforcesHandle, question)
-      setChat((items) => [
-        ...items,
-        {
-          question,
-          answer: response.answer,
-          suggestedActions: response.suggestedActions || [],
-          evidence: response.evidence || [],
-          intent: response.intent,
-          fallbackReason: response.fallbackReason,
-          source: response.source,
-          model: response.model,
-        },
-      ])
+      setChat((items) =>
+        items.map((item) =>
+          item.id === requestId
+            ? {
+                ...item,
+                pending: false,
+                answer: response.answer,
+                suggestedActions: response.suggestedActions || [],
+                evidence: response.evidence || [],
+                intent: response.intent,
+                answerMode: response.answerMode,
+                knowledgeSource: response.knowledgeSource,
+                practiceBudget: response.practiceBudget,
+                fallbackReason: response.fallbackReason,
+                source: response.source,
+                model: response.model,
+              }
+            : item,
+        ),
+      )
       setCoachSource(response.source)
-      setMessage('')
       toast.success('Coach response ready')
     } catch (requestError) {
-      const message = getApiErrorMessage(requestError)
-      setError(message)
-      toast.error(message)
+      const errorMessage = getApiErrorMessage(requestError)
+      setChat((items) =>
+        items.map((item) =>
+          item.id === requestId ? { ...item, pending: false, error: errorMessage } : item,
+        ),
+      )
+      toast.error(errorMessage)
     } finally {
+      requestInFlight.current = false
       setSubmitting(false)
     }
   }
@@ -142,7 +196,7 @@ export function AICoachPage() {
       <SectionHeader
         eyebrow="Your personal CP strategist"
         title="AI performance coach"
-        description="Grounded in your submission history—not generic advice."
+        description="Personalized from your analytics, with general knowledge for broader questions."
         action={
           <Badge tone="green">
             {coachSource === 'rule_based' ? 'Rule-based fallback' : 'Gemini · fallback protected'}
@@ -213,15 +267,14 @@ export function AICoachPage() {
               </p>
             </div>
           </div>
-          <div className="flex-1 space-y-5 overflow-y-auto p-5 sm:p-7">
+          <div ref={chatViewport} className="flex-1 space-y-5 overflow-y-auto p-5 sm:p-7">
             <div className="flex max-w-xl gap-3">
               <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-violet-400/10 text-violet-300">
                 <Sparkles size={16} />
               </div>
               <div className="rounded-2xl rounded-tl-sm bg-white/[.045] p-4 text-sm leading-6 text-slate-300">
-                Codeforces profile, submission, rating, verdict, and topic analytics are the primary
-                source. Gemini turns those verified facts into a readable explanation; the
-                deterministic coach takes over if Gemini is unavailable.
+                Personal questions use verified Codeforces analytics. Broader questions use Gemini's
+                general knowledge without treating it as evidence about your performance.
               </div>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
@@ -233,15 +286,25 @@ export function AICoachPage() {
                   'No unfinished attempted problem is currently prioritized.'}
               </AIResponseCard>
             </div>
-            {chat.map((item, index) => (
-              <div key={`${item.question}-${index}`} className="space-y-3">
+            {chat.map((item) => (
+              <div key={item.id} className="space-y-3">
                 <div className="ml-auto max-w-xl break-words rounded-2xl rounded-tr-sm bg-cyan-400 p-4 text-sm text-slate-950">
                   {item.question}
                 </div>
-                <CoachMessage item={item} />
+                {item.pending ? (
+                  <div className="flex w-fit items-center gap-3 rounded-2xl rounded-tl-sm border border-white/[.05] bg-white/[.045] px-4 py-3 text-sm text-slate-400">
+                    <LoaderCircle size={16} className="animate-spin text-cyan-300" />
+                    Analyzing your question and practice context…
+                  </div>
+                ) : item.error ? (
+                  <div className="w-fit max-w-xl rounded-2xl rounded-tl-sm border border-rose-400/15 bg-rose-400/[.05] px-4 py-3 text-sm text-rose-200">
+                    {item.error}
+                  </div>
+                ) : (
+                  <CoachMessage item={item} />
+                )}
               </div>
             ))}
-            {error && <p className="text-sm text-rose-300">{error}</p>}
           </div>
           <form
             className="border-t border-white/[.06] p-4"
@@ -254,7 +317,7 @@ export function AICoachPage() {
               <Input
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
-                placeholder="Ask about your performance or request a plan…"
+                placeholder="Ask about your performance or anything else…"
                 maxLength={1000}
                 aria-label="Ask the AI performance coach"
               />
@@ -267,7 +330,7 @@ export function AICoachPage() {
               </Button>
             </div>
             <p className="mt-2 text-center text-[10px] text-slate-700">
-              Analytics-grounded response · Gemini with rule-based fallback.
+              Analytics when relevant · general knowledge otherwise · fallback protected.
             </p>
           </form>
         </Card>
@@ -395,14 +458,16 @@ export function PracticePlanPage() {
             key={item.day}
             className={`p-5 transition ${item.done ? 'border-emerald-400/20 bg-emerald-400/[.025]' : ''}`}
           >
-            <div className="flex items-start justify-between">
-              <div className="flex gap-3">
+            <div className="flex min-w-0 items-start justify-between gap-3">
+              <div className="flex min-w-0 gap-3">
                 <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white/[.06] font-mono text-sm text-cyan-300">
                   {item.day}
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-xs text-slate-500">{item.label}</p>
-                  <h3 className="font-semibold">{item.topic}</h3>
+                  <h3 className="truncate font-semibold" title={item.topic}>
+                    {item.topic}
+                  </h3>
                 </div>
               </div>
               <input
@@ -413,12 +478,17 @@ export function PracticePlanPage() {
                 className="h-5 w-5 accent-cyan-400"
               />
             </div>
-            <p className="mt-4 text-sm text-slate-400">{item.goal}</p>
+            <p className="mt-4 line-clamp-3 break-words text-sm text-slate-400" title={item.goal}>
+              {item.goal}
+            </p>
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <RatingBadge>{item.range}</RatingBadge>
               <Badge>{item.count} problems</Badge>
             </div>
-            <p className="mt-4 border-t border-white/[.06] pt-3 text-xs text-slate-600">
+            <p
+              className="mt-4 line-clamp-3 break-words border-t border-white/[.06] pt-3 text-xs text-slate-600"
+              title={item.note}
+            >
               Note · {item.note}
             </p>
           </Card>

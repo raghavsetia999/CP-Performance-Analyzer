@@ -4,6 +4,7 @@ import { validateRequest } from '../../middleware/validateRequest.js'
 import { asyncHandler } from '../../utils/asyncHandler.js'
 import {
   deleteReport,
+  ensureWeeklyReport,
   exportReport,
   getLatestReport,
   getReport,
@@ -16,6 +17,7 @@ export const reportRouter = Router()
 
 reportRouter.use(authMiddleware)
 reportRouter.post('/save', validateRequest(saveReportSchema), asyncHandler(saveReport))
+reportRouter.post('/weekly', asyncHandler(ensureWeeklyReport))
 reportRouter.get('/', asyncHandler(listReports))
 reportRouter.get(
   '/handle/:handle/latest',

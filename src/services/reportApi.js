@@ -6,6 +6,11 @@ export const reportApi = {
     return data.data
   },
 
+  async ensureWeekly() {
+    const { data } = await apiClient.post('/reports/weekly')
+    return data.data
+  },
+
   async list() {
     const { data } = await apiClient.get('/reports')
     return data.data

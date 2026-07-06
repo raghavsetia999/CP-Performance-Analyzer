@@ -125,6 +125,17 @@ export function AnalyticsProvider({ children }) {
       } finally {
         if (active) setLoading(false)
       }
+
+      if (active && user?.preferences?.weeklyReport) {
+        try {
+          const weekly = await reportApi.ensureWeekly()
+          if (active && weekly.generated) {
+            toast.success('Your new weekly performance report is ready.')
+          }
+        } catch {
+          // Weekly generation is non-blocking; live analytics remain usable if it fails.
+        }
+      }
     }
 
     hydrate()

@@ -47,7 +47,7 @@ export function SectionHeader({ eyebrow, title, description, action }) {
           </p>
         )}
       </div>
-      {action}
+      {action && <div className="max-w-full shrink-0">{action}</div>}
     </div>
   )
 }
@@ -96,8 +96,8 @@ export function ChartCard({ title, subtitle, children, className, chartClassName
   return (
     <Card className={`p-5 ${className || ''}`}>
       <div className="mb-5">
-        <h3 className="font-semibold">{title}</h3>
-        {subtitle && <p className="mt-1 text-xs text-slate-500">{subtitle}</p>}
+        <h3 className="break-words font-semibold">{title}</h3>
+        {subtitle && <p className="mt-1 break-words text-xs text-slate-500">{subtitle}</p>}
       </div>
       <div className={chartClassName || 'h-64'}>{children}</div>
     </Card>
@@ -268,9 +268,9 @@ export function AIResponseCard({ title, children, icon: Icon = Sparkles }) {
     <Card className="border-violet-400/20 bg-gradient-to-br from-violet-500/[.08] to-cyan-400/[.03] p-5">
       <div className="mb-3 flex items-center gap-2 text-violet-300">
         <Icon size={18} />
-        <h3 className="font-semibold text-white">{title}</h3>
+        <h3 className="min-w-0 break-words font-semibold text-white">{title}</h3>
       </div>
-      <div className="text-sm leading-6 text-slate-400">{children}</div>
+      <div className="break-words text-sm leading-6 text-slate-400">{children}</div>
     </Card>
   )
 }
@@ -289,7 +289,7 @@ export function WeaknessCard({ item }) {
             Last practiced {item.lastLabel || 'No recorded activity'}
           </p>
         </div>
-        <div className="text-right">
+        <div className="shrink-0 text-right">
           <span className="font-mono text-2xl font-semibold text-rose-300">{item.weakness}</span>
           <p className="text-[10px] uppercase text-slate-600">weakness</p>
         </div>
@@ -361,7 +361,9 @@ export function ProblemTable({ problems, action = 'Upsolve' }) {
                 <p className="truncate font-medium text-slate-200" title={p.name}>
                   {p.name}
                 </p>
-                <p className="font-mono text-xs text-slate-600">{p.contest || p.id}</p>
+                <p className="truncate font-mono text-xs text-slate-600" title={p.contest || p.id}>
+                  {p.contest || p.id}
+                </p>
               </td>
               <td className="px-4">
                 <RatingBadge>{p.rating}</RatingBadge>
@@ -419,7 +421,7 @@ export function PracticeDayCard({ item }) {
         <RatingBadge>{item.range}</RatingBadge>
         <Badge>{item.count} problems</Badge>
       </div>
-      <p className="mt-4 border-t border-white/[.06] pt-3 text-xs text-slate-600">
+      <p className="mt-4 break-words border-t border-white/[.06] pt-3 text-xs text-slate-600">
         Note · {item.note}
       </p>
     </Card>
@@ -428,15 +430,15 @@ export function PracticeDayCard({ item }) {
 export function InsightBanner({ children, icon: Icon = Bot }) {
   return (
     <Card className="flex flex-col justify-between gap-5 border-cyan-400/20 bg-gradient-to-r from-cyan-400/[.08] to-violet-500/[.08] p-6 sm:flex-row sm:items-center">
-      <div className="flex gap-4">
+      <div className="flex min-w-0 gap-4">
         <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-cyan-400 text-slate-950">
           <Icon size={22} />
         </div>
-        <div>
+        <div className="min-w-0">
           <p className="font-mono text-[10px] uppercase tracking-widest text-cyan-300">
             AI performance note
           </p>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-300">{children}</p>
+          <p className="mt-1 max-w-3xl break-words text-sm leading-6 text-slate-300">{children}</p>
         </div>
       </div>
       <ChevronRight className="hidden text-cyan-300 sm:block" />

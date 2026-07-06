@@ -19,7 +19,11 @@ function text(value) {
 }
 
 function ensureSpace(doc, height) {
-  if (doc.y + height > doc.page.height - 60) doc.addPage()
+  if (doc.y + height > doc.page.height - 60) {
+    doc.addPage()
+    return true
+  }
+  return false
 }
 
 function section(doc, title, subtitle, minimumBodyHeight = 0) {
@@ -76,7 +80,8 @@ function tableHeader(doc, columns) {
 }
 
 function tableRow(doc, columns, values, index) {
-  ensureSpace(doc, 27)
+  const movedToNextPage = ensureSpace(doc, 27)
+  if (movedToNextPage) tableHeader(doc, columns)
   const y = doc.y
   if (index % 2 === 0) doc.rect(50, y, 495, 25).fill('#f8fafc')
   let x = 58
@@ -92,12 +97,14 @@ function tableRow(doc, columns, values, index) {
 }
 
 export function createReportPdf(report, output) {
+  const isWeekly = report.reportType === 'weekly'
+  const reportTitle = isWeekly ? 'Weekly Performance Report' : 'Performance Report'
   const doc = new PDFDocument({
     size: 'A4',
     margin: 50,
     bufferPages: true,
     info: {
-      Title: `CP Performance Report - ${text(report.handle)}`,
+      Title: `${reportTitle} - ${text(report.handle)}`,
       Author: 'CP Pulse',
     },
   })
@@ -105,7 +112,7 @@ export function createReportPdf(report, output) {
 
   doc.rect(0, 0, doc.page.width, 150).fill(colors.ink)
   doc.font('Helvetica-Bold').fontSize(11).fillColor('#67e8f9').text('CP PULSE', 50, 44)
-  doc.fontSize(27).fillColor(colors.white).text('Performance Report', 50, 66)
+  doc.fontSize(27).fillColor(colors.white).text(reportTitle, 50, 66)
   doc
     .font('Helvetica')
     .fontSize(10)
@@ -133,22 +140,61 @@ export function createReportPdf(report, output) {
   metrics.forEach(([label, value], index) => metric(doc, 50 + index * 124, 175, 115, label, value))
   doc.y = 250
 
+  if (isWeekly) {
+    const comparison = report.weeklyComparison
+    section(doc, 'Weekly change', 'Compared with your previous weekly report.')
+    if (comparison?.hasBaseline) {
+      const weeklyMetrics = [
+        ['Solved change', `${comparison.solvedChange >= 0 ? '+' : ''}${comparison.solvedChange}`],
+        ['Rating change', `${comparison.ratingChange >= 0 ? '+' : ''}${comparison.ratingChange}`],
+        [
+          'Weakness change',
+          `${comparison.weaknessChange > 0 ? '+' : ''}${comparison.weaknessChange}`,
+        ],
+      ]
+      const y = doc.y
+      weeklyMetrics.forEach(([label, value], index) =>
+        metric(doc, 50 + index * 165, y, 155, label, value),
+      )
+      doc.y = y + 65
+    } else {
+      doc
+        .font('Helvetica')
+        .fontSize(10)
+        .fillColor(colors.muted)
+        .text(
+          'This is your first weekly snapshot. Future reports will show week-over-week changes.',
+          {
+            width: 495,
+          },
+        )
+      doc.moveDown(0.5)
+    }
+  }
+
   const strategy = report.recommendations?.practiceStrategy?.[0]
   if (strategy) {
-    doc.roundedRect(50, doc.y, 495, 58, 8).fill('#ecfeff')
+    const strategyText = text(strategy)
+    const strategyHeight = Math.max(
+      58,
+      doc.font('Helvetica').fontSize(10).heightOfString(strategyText, { width: 465 }) + 42,
+    )
+    ensureSpace(doc, strategyHeight)
+    const strategyY = doc.y
+    doc.roundedRect(50, strategyY, 495, strategyHeight, 8).fill('#ecfeff')
     doc
       .font('Helvetica-Bold')
       .fontSize(9)
       .fillColor(colors.cyan)
-      .text('PRIMARY ACTION', 64, doc.y + 12)
+      .text('PRIMARY ACTION', 64, strategyY + 12)
     doc
       .font('Helvetica')
       .fontSize(10)
       .fillColor(colors.ink)
-      .text(text(strategy), 64, doc.y + 28, {
+      .text(strategyText, 64, strategyY + 28, {
         width: 465,
       })
-    doc.y += 62
+    doc.y = strategyY + strategyHeight + 4
   }
 
   section(doc, 'Topic weakness', 'Higher scores indicate greater practice priority.')

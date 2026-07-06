@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest'
-import { buildReportPayload, saveReportForUser } from '../../src/modules/report/report.service.js'
+import { describe, expect, it, vi } from 'vitest'
+import {
+  buildReportPayload,
+  ensureWeeklyReportForUser,
+  saveReportForUser,
+} from '../../src/modules/report/report.service.js'
 import { buildProgressHistory } from '../../src/modules/progress/progress.service.js'
 import { buildRecommendations } from '../../src/modules/recommendation/recommendation.engine.js'
 import { PassThrough } from 'node:stream'
@@ -68,6 +72,65 @@ describe('report persistence helpers', () => {
 
     expect(pdf.subarray(0, 4).toString()).toBe('%PDF')
     expect(pdf.length).toBeGreaterThan(1000)
+  })
+
+  it('generates a weekly report after seven days and records comparison data', async () => {
+    const previous = {
+      generatedAt: '2026-06-01T00:00:00.000Z',
+      profile: { rating: 1180 },
+      summary: { solvedProblems: 8 },
+      topicAnalysis: [{ topic: 'DP', weakness: 80, attempted: 5 }],
+    }
+    const create = vi.fn(async (payload) => ({ ...payload, id: 'weekly-2' }))
+    const result = await ensureWeeklyReportForUser(
+      {
+        id: 'user-1',
+        codeforcesHandle: 'fixture',
+        preferredPracticeMinutes: 60,
+        preferences: { weeklyReport: true },
+      },
+      {
+        analyze: async () => analysisFixture(),
+        model: {
+          findOne: () => ({ sort: () => ({ lean: async () => previous }) }),
+          create,
+        },
+      },
+      new Date('2026-06-10T00:00:00.000Z'),
+    )
+
+    expect(result.generated).toBe(true)
+    expect(result.report.reportType).toBe('weekly')
+    expect(result.report.weeklyComparison).toMatchObject({
+      hasBaseline: true,
+      solvedChange: 2,
+      ratingChange: 20,
+      weaknessChange: -10,
+    })
+    expect(create).toHaveBeenCalledOnce()
+  })
+
+  it('reuses the current weekly report before the next seven-day boundary', async () => {
+    const current = { id: 'weekly-1', generatedAt: '2026-06-08T00:00:00.000Z' }
+    const analyze = vi.fn()
+    const result = await ensureWeeklyReportForUser(
+      {
+        id: 'user-1',
+        codeforcesHandle: 'fixture',
+        preferredPracticeMinutes: 60,
+        preferences: { weeklyReport: true },
+      },
+      {
+        analyze,
+        model: {
+          findOne: () => ({ sort: () => ({ lean: async () => current }) }),
+        },
+      },
+      new Date('2026-06-10T00:00:00.000Z'),
+    )
+
+    expect(result).toMatchObject({ report: current, generated: false })
+    expect(analyze).not.toHaveBeenCalled()
   })
 })
 

@@ -53,6 +53,7 @@ describe('Gemini provider', () => {
       input: { handle: 'fixture' },
       jsonSchema: chatJsonSchema,
       outputSchema: coachChatOutputSchema,
+      temperature: 0.6,
     })
 
     expect(result.answer).toContain('graph')
@@ -63,6 +64,7 @@ describe('Gemini provider', () => {
       responseMimeType: 'application/json',
       responseJsonSchema: chatJsonSchema,
       candidateCount: 1,
+      temperature: 0.6,
     })
     expect(body.safetySettings).toHaveLength(4)
     expect(JSON.stringify(body)).not.toContain('test-key-that-must-stay-server-side')

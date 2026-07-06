@@ -3,7 +3,7 @@ import mongoose from 'mongoose'
 const preferencesSchema = new mongoose.Schema(
   {
     includeGymSubmissions: { type: Boolean, default: false },
-    weeklyReport: { type: Boolean, default: true },
+    weeklyReport: { type: Boolean, default: false },
     streakReminders: { type: Boolean, default: true },
     contestReminders: { type: Boolean, default: false },
     detailedAIExplanations: { type: Boolean, default: true },

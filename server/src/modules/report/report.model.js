@@ -4,6 +4,7 @@ const reportSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     handle: { type: String, required: true, trim: true, index: true },
+    reportType: { type: String, enum: ['manual', 'weekly'], default: 'manual', index: true },
     schemaVersion: { type: Number, default: 1 },
     profile: { type: mongoose.Schema.Types.Mixed, default: {} },
     summary: { type: mongoose.Schema.Types.Mixed, default: {} },
@@ -13,6 +14,7 @@ const reportSchema = new mongoose.Schema(
     upsolvingProblems: { type: [mongoose.Schema.Types.Mixed], default: [] },
     recommendations: { type: mongoose.Schema.Types.Mixed, default: {} },
     practicePlan: { type: mongoose.Schema.Types.Mixed, default: null },
+    weeklyComparison: { type: mongoose.Schema.Types.Mixed, default: null },
     metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
     source: {
       submissionCount: { type: Number, default: 0 },

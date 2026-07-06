@@ -1,4 +1,5 @@
 import { buildCoachQuestionContext } from './ai.query.js'
+import { buildPracticeBudget } from './ai.budget.js'
 
 const dayLabels = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
@@ -124,8 +125,12 @@ export function generateUpsolvingPlanFromReport(report) {
   }
 }
 
-export function answerCoachQuestion(report, message) {
-  const questionContext = buildCoachQuestionContext(report, message)
+export function answerCoachQuestion(report, message, options = {}) {
+  const practiceBudget = buildPracticeBudget(options.preferredPracticeMinutes)
+  const questionContext = {
+    ...buildCoachQuestionContext(report, message),
+    practiceBudget,
+  }
   const topTopic = report.recommendations.focusTopics[0]
   const ratingRange = report.recommendations.recommendedRatingRange
   const topUpsolve = report.upsolvingAnalysis[0]
@@ -134,23 +139,33 @@ export function answerCoachQuestion(report, message) {
   let answer
   let suggestedActions = report.recommendations.practiceStrategy.slice(0, 3)
 
-  if (questionContext.intent === 'upsolving_plan') {
+  if (questionContext.answerMode === 'general_knowledge') {
+    // The deterministic engine must not disguise personal analytics as an answer to
+    // an unrelated question. General knowledge is supplied by Gemini when available.
+    answer =
+      'The general-knowledge response service is temporarily unavailable. Please retry this question in a moment.'
+    suggestedActions = [
+      'Retry shortly; your question will remain independent of personal analytics.',
+    ]
+  } else if (questionContext.intent === 'upsolving_plan') {
     const problems = questionContext.relevantProblems.length
       ? questionContext.relevantProblems
       : report.upsolvingAnalysis.slice(0, 3)
     answer = problems.length
-      ? `Start your upsolving block with ${problems
+      ? `With ${practiceBudget.dailyMinutes} minutes per day, target ${practiceBudget.difficultProblemsPerDay}–${practiceBudget.targetProblemsPerDay} timed problem attempts daily (${practiceBudget.minutesPerProblemTimebox}-minute standard slots plus ${practiceBudget.reviewMinutes} minutes to review). Start with ${problems
           .slice(0, 3)
           .map((problem) => `${problem.name} (${problem.problemKey})`)
           .join(
             ', ',
-          )}. This order prioritizes unfinished work with the strongest learning value from your history.`
+          )}. A difficult upsolve can use two time slots; count attempts, not guaranteed solves.`
       : 'Your current history has no unsolved attempted problems, so use a focused mixed practice set instead.'
     suggestedActions = problems.length
       ? [
-          `Day 1: Re-attempt ${problems[0].name} without opening the editorial for 30 minutes.`,
-          'Day 2: Read only the missing idea, close the editorial, and implement from memory.',
-          'Day 3: Re-solve the hardest completed problem and write the key observation.',
+          `Attempt ${problems[0].name} independently for ${practiceBudget.minutesPerProblemTimebox} minutes.`,
+          problems[1]
+            ? `Attempt ${problems[1].name} next; use two slots only if it remains high-friction.`
+            : `Use the next slot to re-implement ${problems[0].name} from memory.`,
+          `Spend ${practiceBudget.reviewMinutes} minutes reviewing editorials and recording each missed idea.`,
         ]
       : suggestedActions
   } else if (questionContext.intent === 'problem_recommendation') {
@@ -248,8 +263,15 @@ export function answerCoachQuestion(report, message) {
     question: message,
     answer,
     suggestedActions,
-    evidence: questionContext.evidence,
+    evidence: questionContext.answerMode === 'analytics_grounded' ? questionContext.evidence : [],
     intent: questionContext.intent,
+    answerMode: questionContext.answerMode,
+    knowledgeSource:
+      questionContext.answerMode === 'analytics_grounded'
+        ? 'codeforces_analytics'
+        : 'general_model_knowledge',
+    practiceBudget:
+      questionContext.answerMode === 'analytics_grounded' ? questionContext.practiceBudget : null,
     generatedAt: new Date().toISOString(),
   }
 }

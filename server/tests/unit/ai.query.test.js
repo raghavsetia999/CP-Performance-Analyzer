@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildCoachQuestionContext,
+  classifyCoachAnswerMode,
   responseMatchesQuestion,
 } from '../../src/modules/ai/ai.query.js'
 
@@ -76,6 +77,17 @@ const report = {
 }
 
 describe('AI question retrieval', () => {
+  it('separates personalized analytics questions from general knowledge questions', () => {
+    expect(classifyCoachAnswerMode('Why am I weak in dynamic programming?')).toBe(
+      'analytics_grounded',
+    )
+    expect(classifyCoachAnswerMode('Suggest problems for the 1400-1600 range')).toBe(
+      'analytics_grounded',
+    )
+    expect(classifyCoachAnswerMode('What is dynamic programming?')).toBe('general_knowledge')
+    expect(classifyCoachAnswerMode('Explain photosynthesis simply.')).toBe('general_knowledge')
+  })
+
   it('retrieves the topic named by the user instead of the top weakness', () => {
     const context = buildCoachQuestionContext(
       report,
@@ -114,6 +126,21 @@ describe('AI question retrieval', () => {
           answer:
             'Dynamic Programming is not a strong weakness: you solved 11 of 15 problems for a 73% conversion rate.',
           suggestedActions: ['Review DP transitions.'],
+        },
+        context,
+      ),
+    ).toBe(true)
+  })
+
+  it('does not require analytics citations for a general-knowledge answer', () => {
+    const context = buildCoachQuestionContext(report, 'What is dynamic programming?')
+
+    expect(context.answerMode).toBe('general_knowledge')
+    expect(
+      responseMatchesQuestion(
+        {
+          answer: 'Dynamic programming solves overlapping subproblems and reuses their results.',
+          suggestedActions: [],
         },
         context,
       ),

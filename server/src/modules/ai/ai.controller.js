@@ -10,5 +10,14 @@ export async function upsolvingPlan(request, response) {
 }
 
 export async function chat(request, response) {
-  response.json(successResponse(await chatWithCoach(request.body)))
+  response.json(
+    successResponse(
+      await chatWithCoach({
+        ...request.body,
+        // Use the authenticated account preference rather than trusting client-supplied timing.
+        preferredPracticeMinutes: request.user.preferredPracticeMinutes,
+        targetRating: request.user.targetRating,
+      }),
+    ),
+  )
 }

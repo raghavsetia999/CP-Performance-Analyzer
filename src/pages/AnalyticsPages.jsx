@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Clock3,
   Code2,
+  Download,
   Info,
   RefreshCw,
   Search,
@@ -87,6 +88,17 @@ function formatFullDate(value) {
     hour: 'numeric',
     minute: '2-digit',
   })
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
 }
 
 function AnalyticsState({ loading, error, onRetry }) {
@@ -177,11 +189,11 @@ export function DashboardPage() {
       <Card className="relative overflow-hidden p-6 sm:p-7">
         <div className="absolute right-0 top-0 h-full w-1/2 bg-gradient-to-l from-cyan-400/[.07] to-transparent" />
         <div className="relative flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
-          <div>
+          <div className="min-w-0">
             <Badge tone={cachedSnapshot ? 'amber' : 'green'}>
               {cachedSnapshot ? 'Cached performance snapshot' : '● Live Codeforces data'}
             </Badge>
-            <h2 className="mt-3 text-2xl font-semibold tracking-tight">
+            <h2 className="mt-3 break-words text-2xl font-semibold tracking-tight">
               Welcome back, {profile.handle} <span className="text-slate-600">/</span>
             </h2>
             <p className="mt-1 text-sm text-slate-500">
@@ -261,16 +273,22 @@ export function DashboardPage() {
                   key={activity.submissionId}
                   className="border-b border-white/[.04] last:border-0"
                 >
-                  <td className="px-5 py-4">
+                  <td className="max-w-80 px-5 py-4">
                     <a
                       href={activity.url || undefined}
                       target="_blank"
                       rel="noreferrer"
-                      className="font-medium hover:text-cyan-300"
+                      className="block truncate font-medium hover:text-cyan-300"
+                      title={activity.name}
                     >
                       {activity.name}
                     </a>
-                    <p className="font-mono text-xs text-slate-600">{activity.problemKey}</p>
+                    <p
+                      className="truncate font-mono text-xs text-slate-600"
+                      title={activity.problemKey}
+                    >
+                      {activity.problemKey}
+                    </p>
                   </td>
                   <td className="px-4">
                     <RatingBadge>{activity.rating ?? 'Unrated'}</RatingBadge>
@@ -301,6 +319,7 @@ export function AnalyzeHandlePage() {
   const [report, setReport] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [saving, setSaving] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     const requestedHandle = searchParams.get('handle')
@@ -350,6 +369,24 @@ export function AnalyzeHandlePage() {
       toast.error(message, { id: toastId })
     } finally {
       setSaving(false)
+    }
+  }
+  async function saveAndDownloadPdf() {
+    setExporting(true)
+    setErrorMessage('')
+    const toastId = toast.loading('Generating PDF report...')
+    try {
+      const saved = await reportApi.save(handle.trim())
+      const reportId = saved.id || saved._id
+      const blob = await reportApi.exportPdf(reportId)
+      downloadBlob(blob, `cp-performance-${saved.handle || handle.trim()}.pdf`)
+      toast.success('PDF report downloaded', { id: toastId })
+    } catch (requestError) {
+      const message = getApiErrorMessage(requestError)
+      setErrorMessage(message)
+      toast.error(message, { id: toastId })
+    } finally {
+      setExporting(false)
     }
   }
   return (
@@ -467,7 +504,10 @@ export function AnalyzeHandlePage() {
               ? `${report.topicAnalysis[0].topic} is currently the highest-scoring weakness.`
               : 'There is not enough tagged activity to rank weaknesses yet.'}
           </InsightBanner>
-          <div className="flex justify-end">
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="secondary" onClick={saveAndDownloadPdf} disabled={exporting || saving}>
+              <Download size={16} /> {exporting ? 'Generating PDF…' : 'Download PDF'}
+            </Button>
             <Button onClick={saveReport} disabled={saving}>
               {saving ? 'Saving report…' : 'Save full report'} <ArrowRight size={16} />
             </Button>
@@ -481,8 +521,13 @@ export function AnalyzeHandlePage() {
 
 export function WeaknessReportPage() {
   const { report, loading, error, refresh } = useAnalytics()
+  const [sortMode, setSortMode] = useState('weakness')
   if (!report) return <AnalyticsState loading={loading} error={error} onRetry={refresh} />
-  const topics = report.topicAnalysis
+  const topics = [...report.topicAnalysis].sort((left, right) =>
+    sortMode === 'rate'
+      ? left.rate - right.rate || right.attempted - left.attempted
+      : right.weakness - left.weakness || right.attempted - left.attempted,
+  )
   const overallWeakness = topics.length
     ? Math.round(
         topics.reduce((total, topic) => total + topic.weakness * topic.attempted, 0) /
@@ -554,9 +599,13 @@ export function WeaknessReportPage() {
             title="Topic detail"
             description="Sort and compare the signals behind each score"
             action={
-              <Select>
-                <option>Sort: Weakest first</option>
-                <option>Lowest AC rate</option>
+              <Select
+                aria-label="Sort topic details"
+                value={sortMode}
+                onChange={(event) => setSortMode(event.target.value)}
+              >
+                <option value="weakness">Sort: Weakest first</option>
+                <option value="rate">Lowest AC rate</option>
               </Select>
             }
           />

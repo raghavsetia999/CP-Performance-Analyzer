@@ -71,6 +71,38 @@ function detectIntent(question, requestedTopic) {
   return 'general_coaching'
 }
 
+// Route questions that ask about the user's measured performance to analytics.
+// Conceptual or unrelated questions use the model's general knowledge instead.
+export function classifyCoachAnswerMode(message) {
+  const question = normalizedWords(message)
+  const includes = (...terms) => terms.some((term) => question.includes(` ${term} `))
+  const asksForPersonalData =
+    includes('my', 'me', 'mine') ||
+    /\b(i am|i'm|should i|can i|did i|have i|for me)\b/i.test(message)
+  const asksForMeasuredAnalysis =
+    includes(
+      'weakness',
+      'weak',
+      'performance',
+      'submission',
+      'submissions',
+      'verdict',
+      'ac rate',
+      'solve rate',
+      'rating history',
+      'upsolve',
+      'upsolving',
+    ) || /\b(?:wa|tle)\b/i.test(message)
+  const asksForPersonalizedOutput =
+    /\b(?:recommend|suggest|create|build|make|generate)\b.*\b(?:problems?|practice|plans?|schedule|routine)\b/i.test(
+      message,
+    ) || /\b(?:problem|practice|rating)\b.*\b\d{3,4}\s*(?:-|â€“|â€”|to)\s*\d{3,4}\b/i.test(message)
+
+  return asksForPersonalData || asksForMeasuredAnalysis || asksForPersonalizedOutput
+    ? 'analytics_grounded'
+    : 'general_knowledge'
+}
+
 function bucketBounds(bucket) {
   if (bucket.key === 'unrated') return null
   if (bucket.key === '1800+') return { min: 1800, max: Number.POSITIVE_INFINITY }
@@ -163,6 +195,7 @@ export function buildCoachQuestionContext(report, message) {
   const requestedTopic = findRequestedTopic(report, message)
   const requestedRatingRange = parseRatingRange(message)
   const intent = detectIntent(normalizedQuestion, requestedTopic)
+  const answerMode = classifyCoachAnswerMode(message)
   const relevantRatingBands =
     requestedRatingRange || intent === 'rating_analysis' || intent === 'contest_strategy'
       ? (report.ratingAnalysis || []).filter((band) => overlapsRange(band, requestedRatingRange))
@@ -230,6 +263,7 @@ export function buildCoachQuestionContext(report, message) {
   }
 
   return {
+    answerMode,
     intent,
     requestedTopic: requestedTopic
       ? {
@@ -258,6 +292,10 @@ export function buildCoachQuestionContext(report, message) {
 }
 
 export function responseMatchesQuestion(result, questionContext) {
+  // General answers cannot be verified against Codeforces analytics. Structured-output
+  // validation and provider safety filters still apply, while analytics citation checks do not.
+  if (questionContext.answerMode === 'general_knowledge') return true
+
   const responseText = normalizedWords(
     `${result.answer} ${(result.suggestedActions || []).join(' ')}`,
   )

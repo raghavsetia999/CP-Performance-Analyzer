@@ -18,6 +18,8 @@ and focused practice guidance.
 - Unseen-problem recommendations ranked from the cached Codeforces problem catalogue
 - Saved report APIs and multi-report progress history
 - Authenticated PDF export for saved reports
+- One-click PDF generation from handle analysis with visually verified multi-page layouts
+- Opt-in weekly reports with seven-day deduplication and week-over-week comparison metrics
 - Backend-connected profile, handle, practice, and notification preferences
 - Coalesced Codeforces requests with snapshot, problemset, and stale-cache handling
 - Shared frontend analytics snapshots with session and latest-saved-report fallback
@@ -75,9 +77,9 @@ cd server
 npm test
 ```
 
-The backend currently has 32 tests covering API validation, Codeforces mapping and caching,
+The backend currently has 42 tests covering API validation, Codeforces mapping and caching,
 analytics, unseen recommendations, report/PDF payloads, progress history, the rule-based coach, and
-the guarded Gemini provider.
+the guarded Gemini provider. Weekly report generation and reuse boundaries are also covered.
 
 See [the frontend-aligned implementation report](docs/CP-Performance-Analyzer-Aligned-Report.md)
 for the architecture, data contracts, two-week roadmap, testing plan, and deployment checklist.
