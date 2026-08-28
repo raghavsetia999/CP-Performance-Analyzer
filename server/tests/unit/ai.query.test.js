@@ -4,6 +4,12 @@ import {
   classifyCoachAnswerMode,
   responseMatchesQuestion,
 } from '../../src/modules/ai/ai.query.js'
+import { buildPracticeBudget } from '../../src/modules/ai/ai.budget.js'
+import {
+  buildCoachPromptInput,
+  buildQuestionScopedCoachContext,
+  coachSystemInstruction,
+} from '../../src/modules/ai/ai.prompts.js'
 
 const report = {
   profile: { handle: 'fixture', rating: 1450 },
@@ -145,5 +151,44 @@ describe('AI question retrieval', () => {
         context,
       ),
     ).toBe(true)
+  })
+
+  it('removes duplicated context while retaining the requested topic evidence', () => {
+    const question = 'Explain why I am weak in dynamic programming'
+    const questionContext = {
+      ...buildCoachQuestionContext(report, question),
+      practiceBudget: buildPracticeBudget(60),
+      targetRating: 1600,
+    }
+    const compact = buildCoachPromptInput(report, questionContext, question)
+    const previousShape = {
+      userMessage: question,
+      questionContext,
+      analytics: buildQuestionScopedCoachContext(report, questionContext),
+    }
+
+    expect(compact.data.requestedTopic).toMatchObject({
+      topic: 'Dynamic Programming',
+      attempted: 15,
+      solved: 11,
+      assessment: 'not_a_strong_weakness',
+    })
+    expect(compact).not.toHaveProperty('questionContext')
+    expect(compact).not.toHaveProperty('analytics')
+    expect(JSON.stringify(compact).length).toBeLessThan(JSON.stringify(previousShape).length * 0.7)
+  })
+
+  it('sends no personal analytics for general knowledge and keeps instructions compact', () => {
+    const question = 'What is dynamic programming?'
+    const questionContext = buildCoachQuestionContext(report, question)
+    const compact = buildCoachPromptInput(report, questionContext, question)
+
+    expect(compact).toEqual({
+      question,
+      mode: 'general_knowledge',
+      intent: 'topic_analysis',
+    })
+    expect(JSON.stringify(compact)).not.toContain('fixture')
+    expect(coachSystemInstruction.length).toBeLessThan(2500)
   })
 })

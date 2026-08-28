@@ -20,3 +20,8 @@ export function codeforcesProblemUrl(contestId, index) {
 export function normalizeTag(tag) {
   return String(tag).trim().toLowerCase()
 }
+
+export function caseInsensitiveHandleFilter(handle) {
+  const escaped = String(handle || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`^${escaped}$`, 'i')
+}

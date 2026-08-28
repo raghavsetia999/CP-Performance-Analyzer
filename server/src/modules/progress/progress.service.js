@@ -1,3 +1,4 @@
+import { caseInsensitiveHandleFilter } from '../../utils/codeforcesHelpers.js'
 import { Report } from '../report/report.model.js'
 
 function overallWeakness(topics = []) {
@@ -53,7 +54,7 @@ export function buildProgressHistory(reports) {
 
 export async function getProgressForUser(userId, handle, model = Report) {
   const reports = await model
-    .find({ userId, handle })
+    .find({ userId, handle: caseInsensitiveHandleFilter(handle) })
     .sort({ generatedAt: 1 })
     .select('profile summary topicAnalysis generatedAt')
     .lean()

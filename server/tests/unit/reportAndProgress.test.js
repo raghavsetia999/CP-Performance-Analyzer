@@ -2,9 +2,13 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   buildReportPayload,
   ensureWeeklyReportForUser,
+  getLatestReportForHandle,
   saveReportForUser,
 } from '../../src/modules/report/report.service.js'
-import { buildProgressHistory } from '../../src/modules/progress/progress.service.js'
+import {
+  buildProgressHistory,
+  getProgressForUser,
+} from '../../src/modules/progress/progress.service.js'
 import { buildRecommendations } from '../../src/modules/recommendation/recommendation.engine.js'
 import { PassThrough } from 'node:stream'
 import { createReportPdf } from '../../src/modules/report/report.pdf.js'
@@ -110,6 +114,24 @@ describe('report persistence helpers', () => {
     expect(create).toHaveBeenCalledOnce()
   })
 
+  it('forces a fresh Codeforces snapshot when saving a report', async () => {
+    const analyze = vi.fn(async () => analysisFixture())
+    await saveReportForUser({ id: 'user-1', preferredPracticeMinutes: 60 }, 'fixture', {
+      analyze,
+      model: { create: async (value) => ({ ...value, id: 'report-1' }) },
+    })
+    expect(analyze).toHaveBeenCalledWith('fixture', { forceRefresh: true })
+  })
+
+  it('looks up the latest report with a case-insensitive handle', async () => {
+    const findOne = vi.fn(() => ({ sort: () => ({ lean: async () => ({ id: 'report-1' }) }) }))
+    await getLatestReportForHandle('user-1', 'Raghav', { findOne })
+    const [filter] = findOne.mock.calls[0]
+    expect(filter.handle).toBeInstanceOf(RegExp)
+    expect(filter.handle.test('raghav')).toBe(true)
+    expect(filter.handle.test('RAGHAV')).toBe(true)
+  })
+
   it('reuses the current weekly report before the next seven-day boundary', async () => {
     const current = { id: 'weekly-1', generatedAt: '2026-06-08T00:00:00.000Z' }
     const analyze = vi.fn()
@@ -135,6 +157,15 @@ describe('report persistence helpers', () => {
 })
 
 describe('progress history', () => {
+  it('matches saved reports case-insensitively', async () => {
+    const find = vi.fn(() => ({ sort: () => ({ select: () => ({ lean: async () => [] }) }) }))
+    await getProgressForUser('user-1', 'Raghav', { find })
+    const [filter] = find.mock.calls[0]
+    expect(filter.handle).toBeInstanceOf(RegExp)
+    expect(filter.handle.test('raghav')).toBe(true)
+    expect(filter.handle.test('RAGHAV')).toBe(true)
+  })
+
   it('requires two reports before claiming trend confidence', () => {
     const one = buildProgressHistory([
       {

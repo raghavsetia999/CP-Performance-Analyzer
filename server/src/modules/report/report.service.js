@@ -1,6 +1,7 @@
 import { generatePracticePlanFromReport } from '../ai/ai.engine.js'
 import { analyzeHandle } from '../analytics/analytics.service.js'
 import { ApiError } from '../../utils/ApiError.js'
+import { caseInsensitiveHandleFilter } from '../../utils/codeforcesHelpers.js'
 import { Report } from './report.model.js'
 
 function overallWeakness(topics = []) {
@@ -59,7 +60,7 @@ export async function saveReportForUser(
   dependencies = { analyze: analyzeHandle, model: Report },
   options = {},
 ) {
-  const analysis = await dependencies.analyze(handle)
+  const analysis = await dependencies.analyze(handle, { forceRefresh: true })
   const practicePlan = generatePracticePlanFromReport(analysis, {
     preferredPracticeMinutes: user.preferredPracticeMinutes,
   })
@@ -86,7 +87,11 @@ export async function ensureWeeklyReportForUser(
   }
 
   const latest = await dependencies.model
-    .findOne({ userId: user.id, handle: user.codeforcesHandle, reportType: 'weekly' })
+    .findOne({
+      userId: user.id,
+      handle: caseInsensitiveHandleFilter(user.codeforcesHandle),
+      reportType: 'weekly',
+    })
     .sort({ generatedAt: -1 })
     .lean()
   const nextEligibleAt = latest
@@ -97,7 +102,7 @@ export async function ensureWeeklyReportForUser(
     return { report: latest, generated: false, nextEligibleAt }
   }
 
-  const analysis = await dependencies.analyze(user.codeforcesHandle)
+  const analysis = await dependencies.analyze(user.codeforcesHandle, { forceRefresh: true })
   const practicePlan = generatePracticePlanFromReport(analysis, {
     preferredPracticeMinutes: user.preferredPracticeMinutes,
   })
@@ -130,8 +135,11 @@ export async function getReportForUser(userId, reportId) {
   return report
 }
 
-export async function getLatestReportForHandle(userId, handle) {
-  const report = await Report.findOne({ userId, handle }).sort({ generatedAt: -1 }).lean()
+export async function getLatestReportForHandle(userId, handle, model = Report) {
+  const report = await model
+    .findOne({ userId, handle: caseInsensitiveHandleFilter(handle) })
+    .sort({ generatedAt: -1 })
+    .lean()
   if (!report) {
     throw new ApiError(404, 'REPORT_NOT_FOUND', 'No saved report exists for this handle yet.')
   }

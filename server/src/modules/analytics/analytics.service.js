@@ -146,7 +146,9 @@ export function createSummary(snapshot, topicAnalysis) {
 }
 
 export async function analyzeHandle(handle, options = {}) {
-  const problemsetRequest = getCodeforcesProblemset(options).catch(() => [])
+  const problemsetRequest = getCodeforcesProblemset(
+    options.refreshProblemset ? { forceRefresh: true } : undefined,
+  ).catch(() => [])
   const [snapshot, problemCatalog] = await Promise.all([
     getCodeforcesSnapshot(handle, options),
     problemsetRequest,
